@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+
+<body>
+</body>
+<script>
+  function downloadFile(url, filename) {
+    fetch(url, {
+      headers: new Headers({
+        Origin: location.origin,
+      }),
+      mode: 'cors',
+    })
+      .then(res => {
+        if (res.status == 200) {
+          return res.blob()
+        }
+
+        throw new Error(`status: ${response.status}.`)
+
+      })
+      .then(blob => {
+        download(blob, filename)
+      })
+  }
+
+  function download(blob, filename) {
+    const a = document.createElement('a')
+    a.download = filename
+    const blobUrl = URL.createObjectURL(blob)
+    a.href = blobUrl
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(blobUrl)
+  }
+
+  downloadFile('www', '1.png');
+
+</script>
+
+</html>
