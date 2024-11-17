@@ -5,6 +5,7 @@ use std::{fs::File, io::Write};
 use std::path::Path;
 use clap::{Parser, ValueEnum};
 use reqwest::header::{HeaderMap, HeaderName, USER_AGENT, REFERER, ORIGIN, HeaderValue};
+use regex::Regex;
 
 use std::sync::Arc;
 use tokio::sync::Semaphore;
@@ -74,9 +75,28 @@ async fn main() {
                 let juan_nav = document.select(selector_juan_title);
                 let mut juan_switcher = None;
 
+                let mut comic_name = None;
+                let mut comic_name_2 = None;
+                let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
+                let comic_name_temp = document.select(name_selector);
+                for name in comic_name_temp {
+                    println!("{}", name.inner_html());
+                    comic_name = Some(name.inner_html());
+                    comic_name_2 = Some(name.inner_html());
+                }
+
+                if let Some(name) = comic_name {
+                    // create juan output directory
+                    let _ = fs::create_dir_all(&format!("./{}", &name));
+                } else {
+                    eprintln!("Error: can not find comic name!");
+                    process::exit(1);
+                }
+
                 for nav in juan_nav {
                     println!("nav {}", nav.html());
                     if let Some(t) = nav.text().next() {
+                        println!("t is {}", t);
                         if t.contains("单行本") {
                             let mut current_sibling = nav.next_sibling();
                             while let Some(nav_next) = current_sibling {
@@ -90,15 +110,34 @@ async fn main() {
                                 current_sibling = nav_next.next_sibling();
                             };
                         } else {
-                            eprintln!("Error: juan not exist!");
-                            process::exit(1);
+                            println!("this is not juan!");
+                            continue;
                         }
                     }
                 }
 
                 if let Some(switcher) = juan_switcher {
                     println!("find switcher! name");
-                    println!("{}", switcher.html());
+                    // println!("{}", switcher.html());
+                    for a_btn in switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()) {
+                        if let Some(src) = a_btn.value().attr("href") {
+                            // println!("src is {}, inner is {}", src, a_btn.inner_html());
+                            let mut complete_url = String::from(src);
+                            complete_url.remove(0);
+                            let host = String::from("https://www.antbyw.com");
+                            let complete_url = host + &complete_url;
+                            println!("complete_url is {}, name is {}", complete_url, a_btn.inner_html());
+
+                            if let Some(ref comic_name_temp) = comic_name_2 {
+                                handle_current(
+                                    complete_url,
+                                    ".uk-zjimg img".to_string(),
+                                    "data-src".to_string(),
+                                    format!("{}/{}", *comic_name_temp, a_btn.inner_html())
+                                ).await;
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -117,6 +156,11 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
     let images = document.select(&image_selector);
     let mut img_v: Vec<&str> = Vec::new();
 
+    let document_2 = scraper::Html::parse_document(&html_content);
+    let image_count_selector = scraper::Selector::parse(".uk-badge.ml8").unwrap();
+    let image_count = document_2.select(&image_count_selector).next();
+    let mut count = None;
+
     for img in images {
         let image = img.value().attr(&attr);
 
@@ -130,7 +174,21 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
         }
     }
 
-    println!("img length is {}", img_v.len());
+    count = match image_count {
+        Some(i) => {
+            let re = Regex::new(r"\d+").unwrap();
+            re.find(&i.inner_html()).map(|mat| mat.as_str().to_string())
+        },
+        None => {
+            Some("".to_string())
+        },
+    };
+
+    println!("img length is {}", img_v.len(), );
+    println!("img count on page is {}", count.unwrap());
+    if let Some(image_count_temp) = image_count {
+        println!("image_count is {:?}", image_count_temp.inner_html());
+    }
 
     down_img(img_v, &format!("./{}", &file)).await;
 }
