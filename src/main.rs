@@ -1,15 +1,16 @@
-use reqwest::Client;
-use url::Url;
-use std::fs;
-use std::{fs::File, io::Write};
-use std::path::Path;
 use clap::{Parser, ValueEnum};
-use reqwest::header::{HeaderMap, HeaderName, USER_AGENT, REFERER, ORIGIN, HeaderValue};
 use regex::Regex;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_AGENT};
+use reqwest::Client;
+use std::fs;
+use std::path::Path;
+use std::{fs::File, io::Write};
+use url::Url;
+use indicatif::{ProgressBar, ProgressStyle};
 
+use std::process;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
-use std::process;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -52,97 +53,120 @@ async fn main() {
     let attr: String = cli.attr;
     let file: String = cli.file;
     let dl_type: DlType = cli.dl_type;
-    let element_selector =  format!("{element} img");
-    println!("url is {url}, element_selector is {element_selector}, attr is {attr}, file is {file}");
-
+    let element_selector = format!("{element} img");
+    println!(
+        "url is {url}, element_selector is {element_selector}, attr is {attr}, file is {file}"
+    );
 
     match dl_type {
         DlType::CURRENT => {
             handle_current(url, element_selector, attr, file).await;
         }
         DlType::JUAN => {
-            // current only support antbyw.com
-            if !url.contains("https://www.antbyw.com/") {
-                eprintln!("Error: current only support antbyw.com.");
-                process::exit(1);
-            } else {
-                let client = Client::new();
-                let response = client.get(&url).send().await.unwrap();
-                let html_content = response.text().await.unwrap();
+            handle_juan_hua_fanwai(url, DlType::JUAN).await;
+        }
+        DlType::HUA => {
+            handle_juan_hua_fanwai(url, DlType::HUA).await;
+        }
+        DlType::FANWAI => {
+            handle_juan_hua_fanwai(url, DlType::FANWAI).await;
+        },
+    }
+}
 
-                let document = scraper::Html::parse_document(&html_content);
-                let selector_juan_title = &scraper::Selector::parse("h3.uk-alert-warning").unwrap();
-                let juan_nav = document.select(selector_juan_title);
-                let mut juan_switcher = None;
+async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
+    // current only support antbyw.com
+    if !url.contains("https://www.antbyw.com/") {
+        eprintln!("Error: current only support antbyw.com.");
+        process::exit(1);
+    } else {
+        let client = Client::new();
+        let response = client.get(&url).send().await.unwrap();
+        let html_content = response.text().await.unwrap();
 
-                let mut comic_name = None;
-                let mut comic_name_2 = None;
-                let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
-                let comic_name_temp = document.select(name_selector);
-                for name in comic_name_temp {
-                    println!("{}", name.inner_html());
-                    comic_name = Some(name.inner_html());
-                    comic_name_2 = Some(name.inner_html());
-                }
+        let document = scraper::Html::parse_document(&html_content);
+        let selector_juan_title = &scraper::Selector::parse("h3.uk-alert-warning").unwrap();
+        let juan_nav = document.select(selector_juan_title);
+        let mut juan_switcher = None;
 
-                if let Some(name) = comic_name {
-                    // create juan output directory
-                    let _ = fs::create_dir_all(&format!("./{}", &name));
-                } else {
-                    eprintln!("Error: can not find comic name!");
-                    process::exit(1);
-                }
+        let mut comic_name = None;
+        let mut comic_name_2 = None;
+        let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
+        let comic_name_temp = document.select(name_selector);
+        for name in comic_name_temp {
+            println!("{}", name.inner_html());
+            comic_name = Some(name.inner_html());
+            comic_name_2 = Some(name.inner_html());
+        }
 
-                for nav in juan_nav {
-                    println!("nav {}", nav.html());
-                    if let Some(t) = nav.text().next() {
-                        println!("t is {}", t);
-                        if t.contains("单行本") {
-                            let mut current_sibling = nav.next_sibling();
-                            while let Some(nav_next) = current_sibling {
-                                println!("nav name {:?}", nav_next.value());
-                                if let Some(nav_next_el) = nav_next.value().as_element() {
-                                    if nav_next_el.has_class("uk-switcher", scraper::CaseSensitivity::CaseSensitive) {
-                                        juan_switcher = scraper::ElementRef::wrap(nav_next);
-                                        break;
-                                    }
-                                }
-                                current_sibling = nav_next.next_sibling();
-                            };
-                        } else {
-                            println!("this is not juan!");
-                            continue;
-                        }
-                    }
-                }
+        let text_to_find = match dl_type {
+            DlType::CURRENT => "",
+            DlType::JUAN => "单行本",
+            DlType::HUA => "单话",
+            DlType::FANWAI => "番外篇",
+        };
 
-                if let Some(switcher) = juan_switcher {
-                    println!("find switcher! name");
-                    // println!("{}", switcher.html());
-                    for a_btn in switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()) {
-                        if let Some(src) = a_btn.value().attr("href") {
-                            // println!("src is {}, inner is {}", src, a_btn.inner_html());
-                            let mut complete_url = String::from(src);
-                            complete_url.remove(0);
-                            let host = String::from("https://www.antbyw.com");
-                            let complete_url = host + &complete_url;
-                            println!("complete_url is {}, name is {}", complete_url, a_btn.inner_html());
+        if let Some(name) = comic_name {
+            // create juan output directory
+            let _ = fs::create_dir_all(&format!("./{} {}", &name, text_to_find));
+        } else {
+            eprintln!("Error: can not find comic name!");
+            process::exit(1);
+        }
 
-                            if let Some(ref comic_name_temp) = comic_name_2 {
-                                handle_current(
-                                    complete_url,
-                                    ".uk-zjimg img".to_string(),
-                                    "data-src".to_string(),
-                                    format!("{}/{}", *comic_name_temp, a_btn.inner_html())
-                                ).await;
+        for nav in juan_nav {
+            println!("nav {}", nav.html());
+            if let Some(t) = nav.text().next() {
+                println!("t is {}", t);
+                if t.contains(text_to_find) {
+                    let mut current_sibling = nav.next_sibling();
+                    while let Some(nav_next) = current_sibling {
+                        println!("nav name {:?}", nav_next.value());
+                        if let Some(nav_next_el) = nav_next.value().as_element() {
+                            if nav_next_el
+                                .has_class("uk-switcher", scraper::CaseSensitivity::CaseSensitive)
+                            {
+                                juan_switcher = scraper::ElementRef::wrap(nav_next);
+                                break;
                             }
                         }
+                        current_sibling = nav_next.next_sibling();
+                    }
+                } else {
+                    println!("this is not juan!");
+                    continue;
+                }
+            }
+        }
+
+        if let Some(switcher) = juan_switcher {
+            println!("find switcher! name");
+            // println!("{}", switcher.html());
+            for a_btn in switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()) {
+                if let Some(src) = a_btn.value().attr("href") {
+                    // println!("src is {}, inner is {}", src, a_btn.inner_html());
+                    let mut complete_url = String::from(src);
+                    complete_url.remove(0);
+                    let host = String::from("https://www.antbyw.com");
+                    let complete_url = host + &complete_url;
+                    println!(
+                        "complete_url is {}, name is {}",
+                        complete_url,
+                        a_btn.inner_html()
+                    );
+
+                    if let Some(ref comic_name_temp) = comic_name_2 {
+                        handle_current(
+                            complete_url,
+                            ".uk-zjimg img".to_string(),
+                            "data-src".to_string(),
+                            format!("./{} {}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
+                        )
+                        .await;
                     }
                 }
             }
-        },
-        DlType::HUA => todo!(),
-        DlType::FANWAI => todo!(),
+        }
     }
 }
 
@@ -159,7 +183,7 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
     let document_2 = scraper::Html::parse_document(&html_content);
     let image_count_selector = scraper::Selector::parse(".uk-badge.ml8").unwrap();
     let image_count = document_2.select(&image_count_selector).next();
-    let mut count = None;
+    // let mut count = None;
 
     for img in images {
         let image = img.value().attr(&attr);
@@ -169,23 +193,21 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
         match image {
             Some(i) => {
                 img_v.push(i);
-            },
+            }
             None => println!("img is missing!"),
         }
     }
 
-    count = match image_count {
-        Some(i) => {
-            let re = Regex::new(r"\d+").unwrap();
-            re.find(&i.inner_html()).map(|mat| mat.as_str().to_string())
-        },
-        None => {
-            Some("".to_string())
-        },
-    };
+    // count = match image_count {
+    //     Some(i) => {
+    //         let re = Regex::new(r"\d+").unwrap();
+    //         re.find(&i.inner_html()).map(|mat| mat.as_str().to_string())
+    //     }
+    //     None => Some("".to_string()),
+    // };
 
-    println!("img length is {}", img_v.len(), );
-    println!("img count on page is {}", count.unwrap());
+    // println!("img length is {}", img_v.len(),);
+    // println!("img count on page is {}", count.unwrap());
     if let Some(image_count_temp) = image_count {
         println!("image_count is {:?}", image_count_temp.inner_html());
     }
@@ -203,12 +225,20 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
     headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"));
     headers.insert(REFERER, HeaderValue::from_str(&domain).unwrap());
     headers.insert(ORIGIN, HeaderValue::from_str(&domain).unwrap());
-    headers.insert(HeaderName::from_static("sec-fetch-mode"), HeaderValue::from_static("no-cors"));
+    headers.insert(
+        HeaderName::from_static("sec-fetch-mode"),
+        HeaderValue::from_static("no-cors"),
+    );
 
     println!("domain is {domain}, ext is {ext}");
 
-    let semaphore = Arc::new(Semaphore::new(10));
+    let semaphore = Arc::new(Semaphore::new(20));
     let mut tasks = vec![];
+
+    let bar = Arc::new(ProgressBar::new(url.len().try_into().unwrap()));
+    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg} {duration}")
+        .unwrap()
+        .progress_chars("##-"));
 
     for (index, i) in url.iter().enumerate() {
         let client = client.clone();
@@ -217,12 +247,14 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
         let semaphore = semaphore.clone();
         let ext = ext.clone();
         let url = i.to_string();
+        let bar = Arc::clone(&bar);
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
 
-            println!("downloading {}", url);
-            let response = client.get(url)
+            // println!("downloading {}", url);
+            let response = client
+                .get(url)
                 .headers(headers)
                 .send()
                 .await
@@ -235,6 +267,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
             let path = Path::new(&name);
             let mut file = File::create(path).unwrap();
             file.write_all(&response).unwrap();
+            bar.inc(1);
         });
 
         tasks.push(task);
@@ -243,13 +276,14 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
     for task in tasks {
         let _ = task.await;
     }
+    bar.finish_with_message(format!("{} is done!", url.len()));
 }
 
 fn handle_url(url_string: &str) -> String {
     let mut res: String = "".to_string();
     if let Ok(url) = Url::parse(url_string) {
         if let Some(d) = url.domain() {
-            println!("Domain: {}", d);
+            // println!("Domain: {}", d);
             let d_vec = split_string(d, ".");
             let last_two = &d_vec[d_vec.len() - 2..];
             let mut new_array: Vec<&str> = last_two.iter().map(|s| s.as_str()).collect();
@@ -277,7 +311,7 @@ fn handle_img_extension(url_string: &str) -> String {
     let mut res = "";
     if let Some(index) = url_string.rfind('.') {
         res = &url_string[index + 1..];
-        println!("File extension: {}", res);
+        // println!("File extension: {}", res);
     } else {
         println!("File extension not found in the URL");
     }
