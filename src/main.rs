@@ -1,12 +1,13 @@
 use clap::{Parser, ValueEnum};
-use regex::Regex;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use reqwest::Client;
 use std::fs;
 use std::path::Path;
-use std::{fs::File, io::Write};
+use std::{fs::File};
+use std::io::{Cursor};
 use url::Url;
 use indicatif::{ProgressBar, ProgressStyle};
+use image::{DynamicImage, ImageFormat, ImageError};
 
 use std::process;
 use std::sync::Arc;
@@ -43,6 +44,8 @@ enum DlType {
     FANWAI,
     CURRENT,
 }
+
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=146794" -d "juan"
 
 #[tokio::main]
 async fn main() {
@@ -84,6 +87,8 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         let response = client.get(&url).send().await.unwrap();
         let html_content = response.text().await.unwrap();
 
+        println!("html_content is {}", html_content);
+
         let document = scraper::Html::parse_document(&html_content);
         let selector_juan_title = &scraper::Selector::parse("h3.uk-alert-warning").unwrap();
         let juan_nav = document.select(selector_juan_title);
@@ -108,7 +113,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
 
         if let Some(name) = comic_name {
             // create juan output directory
-            let _ = fs::create_dir_all(&format!("./{} {}", &name, text_to_find));
+            let _ = fs::create_dir_all(&format!("./{}_{}", &name, text_to_find));
         } else {
             eprintln!("Error: can not find comic name!");
             process::exit(1);
@@ -263,10 +268,36 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 .await
                 .unwrap();
 
-            let name = format!("{}/{}.{}", file_path, index, ext);
-            let path = Path::new(&name);
-            let mut file = File::create(path).unwrap();
-            file.write_all(&response).unwrap();
+            let name = format!("{}/{}", file_path, index);
+            // let path = Path::new(&name);
+
+            let img_format = match ext.as_str() {
+                "jpg" => image::ImageFormat::Jpeg,
+                "png" => image::ImageFormat::Png,
+                "webp" => image::ImageFormat::WebP,
+                _ => {
+                    eprintln!("Error: image extension is unknown!");
+                    process::exit(1);
+                }
+            };
+
+            let img = image::load(Cursor::new(response), img_format);
+
+            match img {
+                Ok(img) => {
+                    // 将图像转换为 JPG 格式，因为后续转换成pdf的时候，如果是其他图片格式，pdf文件会很大
+                    let jpg_bytes = img.to_rgb8(); // 转换为 RGB 格式
+                    let mut output_file = File::create(Path::new(&format!("{}.jpg", name))).unwrap();
+                    jpg_bytes.write_to(&mut output_file, ImageFormat::Jpeg).unwrap();
+                },
+                Err(e) => {
+                    eprintln!("Error: image load is error! ImageError is {}", e);
+                    process::exit(1);
+                }
+            }
+
+            // let mut file = File::create(path).unwrap();
+            // file.write_all(&response).unwrap();
             bar.inc(1);
         });
 
