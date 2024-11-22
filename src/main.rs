@@ -89,8 +89,6 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         let response = client.get(&url).send().await.unwrap();
         let html_content = response.text().await.unwrap();
 
-        println!("html_content is {}", html_content);
-
         let document = scraper::Html::parse_document(&html_content);
         let selector_juan_title = &scraper::Selector::parse("h3.uk-alert-warning").unwrap();
         let juan_nav = document.select(selector_juan_title);
@@ -101,9 +99,8 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
         let comic_name_temp = document.select(name_selector);
         for name in comic_name_temp {
-            println!("{}", name.inner_html());
-            comic_name = Some(name.inner_html());
-            comic_name_2 = Some(name.inner_html());
+            comic_name = Some(name.inner_html().replace(" ", "_"));
+            comic_name_2 = Some(name.inner_html().replace(" ", "_"));
         }
 
         let text_to_find = match dl_type {
@@ -115,20 +112,17 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
 
         if let Some(name) = comic_name {
             // create juan output directory
-            let _ = fs::create_dir_all(&format!("./{}_{}", &name, text_to_find));
+            let _ = fs::create_dir_all(&(format!("./{}_{}", &name, text_to_find).replace(" ", "_")));
         } else {
             eprintln!("Error: can not find comic name!");
             process::exit(1);
         }
 
         for nav in juan_nav {
-            println!("nav {}", nav.html());
             if let Some(t) = nav.text().next() {
-                println!("t is {}", t);
                 if t.contains(text_to_find) {
                     let mut current_sibling = nav.next_sibling();
                     while let Some(nav_next) = current_sibling {
-                        println!("nav name {:?}", nav_next.value());
                         if let Some(nav_next_el) = nav_next.value().as_element() {
                             if nav_next_el
                                 .has_class("uk-switcher", scraper::CaseSensitivity::CaseSensitive)
@@ -140,16 +134,28 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                         current_sibling = nav_next.next_sibling();
                     }
                 } else {
-                    println!("this is not juan!");
+                    // println!("this is not juan!");
                     continue;
                 }
             }
         }
 
         if let Some(switcher) = juan_switcher {
-            println!("find switcher! name");
-            // println!("{}", switcher.html());
-            for a_btn in switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()) {
+            // println!("find switcher! name");
+            let mut target: Vec<_> = switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()).collect();
+
+            target.sort_by(|a, b| {
+                let a_inner = a.inner_html();
+                let b_inner = b.inner_html();
+
+                // 提取数字并进行比较
+                let a_number = extract_number(&a_inner);
+                let b_number = extract_number(&b_inner);
+
+                a_number.cmp(&b_number)
+            });
+
+            for a_btn in target {
                 if let Some(src) = a_btn.value().attr("href") {
                     // println!("src is {}, inner is {}", src, a_btn.inner_html());
                     let mut complete_url = String::from(src);
@@ -167,14 +173,47 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                             complete_url,
                             ".uk-zjimg img".to_string(),
                             "data-src".to_string(),
-                            format!("./{} {}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
+                            format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
                         )
                         .await;
                     }
                 }
             }
+
+            // println!("{}", switcher.html());
+            // for a_btn in switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()) {
+            //     if let Some(src) = a_btn.value().attr("href") {
+            //         // println!("src is {}, inner is {}", src, a_btn.inner_html());
+            //         let mut complete_url = String::from(src);
+            //         complete_url.remove(0);
+            //         let host = String::from("https://www.antbyw.com");
+            //         let complete_url = host + &complete_url;
+            //         println!(
+            //             "complete_url is {}, name is {}",
+            //             complete_url,
+            //             a_btn.inner_html()
+            //         );
+
+            //         if let Some(ref comic_name_temp) = comic_name_2 {
+            //             handle_current(
+            //                 complete_url,
+            //                 ".uk-zjimg img".to_string(),
+            //                 "data-src".to_string(),
+            //                 format!("./{} {}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
+            //             )
+            //             .await;
+            //         }
+            //     }
+            // }
         }
     }
+}
+
+// 从字符串中提取数字
+fn extract_number(s: &str) -> usize {
+    s.chars()
+        .filter_map(|c| c.to_digit(10)) // 过滤出数字字符
+        .fold(0, |acc, digit| acc * 10 + digit as usize) // 转换为 usize
 }
 
 async fn handle_current(url: String, element_selector: String, attr: String, file: String) {
