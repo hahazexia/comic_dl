@@ -3,15 +3,17 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_
 use reqwest::Client;
 use std::fs;
 use std::path::Path;
-use std::{fs::File};
-use std::io::{Cursor};
+use std::fs::File;
+use std::io::Cursor;
 use url::Url;
 use indicatif::{ProgressBar, ProgressStyle};
-use image::{DynamicImage, ImageFormat, ImageError};
+use image::ImageFormat;
 
 use std::process;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
+
+// cargo run -- -u "" -d ""
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
