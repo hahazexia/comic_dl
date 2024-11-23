@@ -303,15 +303,15 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
         let file_path = file_path.to_string();
         let semaphore = semaphore.clone();
         let ext = ext.clone();
-        let url = i.to_string();
+        let temp_url = i.to_string();
         let bar = Arc::clone(&bar);
 
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
 
-            // println!("downloading {}", url);
+            // println!("downloading {}", temp_url);
             let response = client
-                .get(url)
+                .get(temp_url)
                 .headers(headers)
                 .send()
                 .await
