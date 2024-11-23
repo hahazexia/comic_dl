@@ -374,6 +374,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                         "index ".red(),
                         index.to_string().green(),
                     );
+                    return;
                     // let mut file = File::create(
                     //     Path::new(&format!("{}.{}", name, ext)),
                     // ).unwrap();
