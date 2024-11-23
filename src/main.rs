@@ -8,10 +8,10 @@ use std::io::Cursor;
 use url::Url;
 use indicatif::{ProgressBar, ProgressStyle};
 use image::ImageFormat;
-
+use std::sync::{Arc, Mutex};
 use std::process;
-use std::sync::Arc;
 use tokio::sync::Semaphore;
+use colored::Colorize;
 
 // cargo run -- -u "" -d ""
 
@@ -47,10 +47,17 @@ enum DlType {
     CURRENT,
 }
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=146794" -d "juan"
+// const RED: &str = "\x1b[31m";    // 红色
+// const GREEN: &str = "\x1b[32m";  // 绿色
+// const RESET: &str = "\x1b[0m";   // 重置颜色
+// const YELLOW: &str = "\x1b[33m"; // 黄色
+
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=152174" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916039"
 
 #[tokio::main]
 async fn main() {
+
     let cli = Cli::parse();
 
     let url: String = cli.url;
@@ -111,6 +118,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         };
 
         if let Some(name) = comic_name {
+            println!("comic name is {}", name);
             // create juan output directory
             let _ = fs::create_dir_all(&(format!("./{}_{}", &name, text_to_find).replace(" ", "_")));
         } else {
@@ -278,6 +286,8 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
 
     println!("domain is {domain}, ext is {ext}");
 
+    let img_format_error = Arc::new(Mutex::new(Vec::new()));
+
     let semaphore = Arc::new(Semaphore::new(20));
     let mut tasks = vec![];
 
@@ -287,6 +297,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
         .progress_chars("##-"));
 
     for (index, i) in url.iter().enumerate() {
+        let img_format_error_clone = Arc::clone(&img_format_error);
         let client = client.clone();
         let headers = headers.clone();
         let file_path = file_path.to_string();
@@ -312,7 +323,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
             let name = format!("{}/{}", file_path, index);
             // let path = Path::new(&name);
 
-            let img_format = match ext.as_str() {
+            let mut img_format = match ext.as_str() {
                 "jpg" => image::ImageFormat::Jpeg,
                 "png" => image::ImageFormat::Png,
                 "webp" => image::ImageFormat::WebP,
@@ -322,7 +333,30 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 }
             };
 
-            let img = image::load(Cursor::new(response), img_format);
+            // let format_result = image::guess_format(&response).unwrap();
+            let format_result = match image::guess_format(&response) {
+                Ok(format) => {
+                    format
+                },
+                Err(_err) => {
+                    let mut img_format_error_clone_lock = img_format_error_clone.lock().unwrap();
+                    img_format_error_clone_lock.push(index);
+                    // return;
+                    img_format
+                }
+            };
+
+            if format_to_string(&format_result) == "other unknown format" {
+                eprintln!("!!!!!!! Unknown image format, index = {}", index);
+            }
+
+
+            if img_format != format_result {
+                println!("image ext {} on web is wrong, image library guess_format return {}", format_to_string(&img_format), format_to_string(&format_result));
+                img_format = format_result;
+            }
+
+            let img = image::load(Cursor::new(&response), img_format);
 
             match img {
                 Ok(img) => {
@@ -332,8 +366,19 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                     jpg_bytes.write_to(&mut output_file, ImageFormat::Jpeg).unwrap();
                 },
                 Err(e) => {
-                    eprintln!("Error: image load is error! ImageError is {}", e);
-                    process::exit(1);
+                    // this maybe the web image is error, reqwest library can not download it
+                    eprintln!(
+                        "{} image save is error! ImageError is {} {} is {}",
+                        "Error: ".red(),
+                        e.to_string().yellow(),
+                        "index ".red(),
+                        index.to_string().green(),
+                    );
+                    // let mut file = File::create(
+                    //     Path::new(&format!("{}.{}", name, ext)),
+                    // ).unwrap();
+                    // file.write_all(&response).unwrap();
+                    // process::exit(1);
                 }
             }
 
@@ -348,7 +393,44 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
     for task in tasks {
         let _ = task.await;
     }
-    bar.finish_with_message(format!("{} is done!", url.len()));
+
+    let errors =img_format_error.lock().unwrap();
+    if errors.is_empty() {
+        bar.finish_with_message(format!("{} is done!", url.len()));
+    } else {
+        bar.abandon();
+        for (i, err) in errors.iter().enumerate() {
+            eprintln!(
+                "{} {} {} {} image format is unknown",
+                "num ".red(),
+                (i + 1).to_string().green(),
+                "index ".red(),
+                (err + 1).to_string().green(),
+            );
+        }
+    }
+}
+
+fn format_to_string(format: &ImageFormat) -> &'static str {
+    match format {
+        ImageFormat::Jpeg => "JPEG",
+        ImageFormat::Png => "PNG",
+        ImageFormat::Gif => "GIF",
+        ImageFormat::Bmp => "BMP",
+        ImageFormat::Tiff => "TIFF",
+        ImageFormat::WebP => "WEBP",
+        ImageFormat::Pnm => "PNM",
+        ImageFormat::Tga => "TGA",
+        ImageFormat::Dds => "DDS",
+        ImageFormat::Ico => "ICO",
+        ImageFormat::Hdr => "HDR",
+        ImageFormat::OpenExr => "OPENEXR",
+        ImageFormat::Farbfeld => "FARBFELD",
+        ImageFormat::Avif => "AVIF",
+        ImageFormat::Qoi => "QOI",
+        ImageFormat::Pcx => "PCX",
+        _ => "other unknown format",
+    }
 }
 
 fn handle_url(url_string: &str) -> String {
