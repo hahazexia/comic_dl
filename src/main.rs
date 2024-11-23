@@ -4,7 +4,7 @@ use reqwest::Client;
 use std::fs;
 use std::path::Path;
 use std::fs::File;
-use std::io::Cursor;
+use std::io::{Cursor, Write};
 use url::Url;
 use indicatif::{ProgressBar, ProgressStyle};
 use image::ImageFormat;
@@ -53,7 +53,7 @@ enum DlType {
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=152174" -d "juan"
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916039"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 #[tokio::main]
 async fn main() {
@@ -374,11 +374,12 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                         "index ".red(),
                         index.to_string().green(),
                     );
+                    // althrough image download failed, still save the damaged image as a placeholder, for replacing it after all is done
+                    let mut file = File::create(
+                        Path::new(&format!("{}.{}", name, ext)),
+                    ).unwrap();
+                    file.write_all(&response).unwrap();
                     return;
-                    // let mut file = File::create(
-                    //     Path::new(&format!("{}.{}", name, ext)),
-                    // ).unwrap();
-                    // file.write_all(&response).unwrap();
                     // process::exit(1);
                 }
             }
