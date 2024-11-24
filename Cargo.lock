@@ -323,6 +323,7 @@ dependencies = [
 name = "comic_dl"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "colored",
  "image",

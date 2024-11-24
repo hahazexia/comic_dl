@@ -12,6 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::process;
 use tokio::sync::Semaphore;
 use colored::Colorize;
+use anyhow::{Context, Result};
+use std::time::Duration;
+use tokio::time::sleep;
 
 // cargo run -- -u "" -d ""
 
@@ -52,7 +55,7 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=152174" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=186715" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 #[tokio::main]
@@ -72,7 +75,7 @@ async fn main() {
 
     match dl_type {
         DlType::CURRENT => {
-            handle_current(url, element_selector, attr, file).await;
+            let _ = handle_current(url, element_selector, attr, file).await;
         }
         DlType::JUAN => {
             handle_juan_hua_fanwai(url, DlType::JUAN).await;
@@ -92,7 +95,9 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         eprintln!("Error: current only support antbyw.com.");
         process::exit(1);
     } else {
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(Duration::from_secs(10))
+            .build().unwrap();
         let response = client.get(&url).send().await.unwrap();
         let html_content = response.text().await.unwrap();
 
@@ -176,14 +181,46 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                         a_btn.inner_html()
                     );
 
+
                     if let Some(ref comic_name_temp) = comic_name_2 {
-                        handle_current(
-                            complete_url,
-                            ".uk-zjimg img".to_string(),
-                            "data-src".to_string(),
-                            format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
-                        )
-                        .await;
+                        let dir_path = format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html());
+                        let path = Path::new(&dir_path);
+
+                        println!("{}", dir_path);
+
+                        if path.is_dir() {
+                            println!("{}: {}", "dir already exist, continue next".green(), dir_path);
+                            continue;
+                        } else {
+                            let max_retries = 3; // 最大重试次数
+                            let mut attempts = 0;
+                            loop {
+                                attempts += 1;
+
+                                match handle_current(
+                                    complete_url.clone(),
+                                    ".uk-zjimg img".to_string(),
+                                    "data-src".to_string(),
+                                    format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
+                                )
+                                .await {
+                                    Ok(_) => {
+                                        println!("");
+                                        break;
+                                    },
+                                    Err(e) => {
+                                        if attempts < max_retries {
+                                            println!("{} Attempt {}/{} failed: {}. Retrying...", "Error: ".red(), attempts, max_retries, e);
+                                            sleep(Duration::from_secs(2)).await; // 等待 2 秒后重试
+                                            continue;
+                                        } else {
+                                            eprintln!("{} All {} attempts failed: {}", "Error: ".red(), max_retries, e);
+                                            process::exit(1);
+                                        }
+                                    },
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -224,18 +261,22 @@ fn extract_number(s: &str) -> usize {
         .fold(0, |acc, digit| acc * 10 + digit as usize) // 转换为 usize
 }
 
-async fn handle_current(url: String, element_selector: String, attr: String, file: String) {
-    let client = Client::new();
-    let response = client.get(&url).send().await.unwrap();
-    let html_content = response.text().await.unwrap();
+async fn handle_current(url: String, element_selector: String, attr: String, file: String) -> Result<()> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
+    let response = client.get(&url).send().await.context("Failed to send request".red())?;
+    let html_content = response.text().await.context("Failed to get response text".red())?;
 
     let document = scraper::Html::parse_document(&html_content);
-    let image_selector = scraper::Selector::parse(&element_selector).unwrap();
+    let image_selector = scraper::Selector::parse(&element_selector)
+        .map_err(|e| anyhow::anyhow!("Failed to parse image selector: {:?}", e))?;
     let images = document.select(&image_selector);
     let mut img_v: Vec<&str> = Vec::new();
 
     let document_2 = scraper::Html::parse_document(&html_content);
-    let image_count_selector = scraper::Selector::parse(".uk-badge.ml8").unwrap();
+    let image_count_selector = scraper::Selector::parse(".uk-badge.ml8")
+        .map_err(|e| anyhow::anyhow!("Failed to parse image count selector: {:?}", e))?;
     let image_count = document_2.select(&image_count_selector).next();
     // let mut count = None;
 
@@ -267,6 +308,7 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
     }
 
     down_img(img_v, &format!("./{}", &file)).await;
+    Ok(())
 }
 
 async fn down_img(url: Vec<&str>, file_path: &str) {
