@@ -15,8 +15,7 @@ use colored::Colorize;
 use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::time::sleep;
-
-// cargo run -- -u "" -d ""
+// use std::fmt::Write as FmtWrite;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -55,7 +54,7 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=156122" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=154663" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 #[tokio::main]
@@ -70,7 +69,15 @@ async fn main() {
     let dl_type: DlType = cli.dl_type;
     let element_selector = format!("{element} img");
     println!(
-        "url is {url}, element_selector is {element_selector}, attr is {attr}, file is {file}"
+        "{}is {}, {}is {}, {}is {}, {}is {}",
+        "url ".purple(),
+        url,
+        "element_selector ".purple(),
+        element_selector,
+        "attr ".purple(),
+        attr,
+        "file ".purple(),
+        file,
     );
 
     match dl_type {
@@ -123,7 +130,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         };
 
         if let Some(name) = comic_name {
-            println!("comic name is {}", name);
+            println!("{}{}", "comic name is ".bright_yellow(), name.to_string().bright_green());
             // create juan output directory
             let _ = fs::create_dir_all(&(format!("./{}_{}", &name, text_to_find).replace(" ", "_")));
         } else {
@@ -176,10 +183,12 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                     let host = String::from("https://www.antbyw.com");
                     let complete_url = host + &complete_url;
                     println!(
-                        "{} {} complete_url is {}, name is {}",
+                        "{} {} {}is {}, {}is {}",
                         "num".red(),
                         format!("{}", i + 1).red(),
+                        "complete_url ".purple(),
                         complete_url,
+                        "name ".purple(),
                         a_btn.inner_html()
                     );
 
@@ -188,7 +197,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                         let dir_path = format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html());
                         let path = Path::new(&dir_path);
 
-                        println!("{}", dir_path);
+                        println!("{}", dir_path.to_string().bright_black().on_bright_white());
 
                         if path.is_dir() {
                             println!("{}: {}", "dir already exist, continue next".green(), dir_path);
@@ -306,7 +315,7 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
     // println!("img length is {}", img_v.len(),);
     // println!("img count on page is {}", count.unwrap());
     if let Some(image_count_temp) = image_count {
-        println!("image_count is {:?}", image_count_temp.inner_html());
+        println!("{}{:?}", "image_count is ".bright_red(), image_count_temp.inner_html());
     }
 
     down_img(img_v, &format!("./{}", &file)).await;
@@ -336,9 +345,13 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
     let mut tasks = vec![];
 
     let bar = Arc::new(ProgressBar::new(url.len().try_into().unwrap()));
-    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg} {duration}")
-        .unwrap()
-        .progress_chars("##-"));
+    // bar.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+    //     .unwrap()
+    //     .with_key("eta", |state: &ProgressState, w: &mut dyn FmtWrite| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()));
+
+    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg} {duration}")
+        .unwrap());
+        // .progress_chars("##-"));
 
     for (index, i) in url.iter().enumerate() {
         let img_format_error_clone = Arc::clone(&img_format_error);
@@ -442,16 +455,18 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
 
     let errors =img_format_error.lock().unwrap();
     if errors.is_empty() {
-        bar.finish_with_message(format!("{} is done!", url.len()));
+        let finish_text = format!("{} is done!", url.len());
+
+        bar.finish_with_message(finish_text.bright_blue().to_string());
     } else {
         bar.abandon();
         for (i, err) in errors.iter().enumerate() {
             eprintln!(
                 "{} {} {} {} image format is unknown",
                 "num ".red(),
-                (i + 1).to_string().green(),
+                (i + 1).to_string().bright_yellow(),
                 "index ".red(),
-                (err + 1).to_string().green(),
+                (err + 1).to_string().bright_yellow(),
             );
         }
     }
