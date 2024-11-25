@@ -55,7 +55,7 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=186715" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=156122" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 #[tokio::main]
@@ -168,7 +168,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                 a_number.cmp(&b_number)
             });
 
-            for a_btn in target {
+            for (i, a_btn) in target.iter().enumerate() {
                 if let Some(src) = a_btn.value().attr("href") {
                     // println!("src is {}, inner is {}", src, a_btn.inner_html());
                     let mut complete_url = String::from(src);
@@ -176,7 +176,9 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                     let host = String::from("https://www.antbyw.com");
                     let complete_url = host + &complete_url;
                     println!(
-                        "complete_url is {}, name is {}",
+                        "{} {} complete_url is {}, name is {}",
+                        "num".red(),
+                        format!("{}", i + 1).red(),
                         complete_url,
                         a_btn.inner_html()
                     );
