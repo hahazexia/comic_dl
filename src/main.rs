@@ -1,13 +1,14 @@
 use clap::{Parser, ValueEnum};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use reqwest::Client;
+use tokio::task;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::{Cursor, Write};
 use url::Url;
 use indicatif::{ProgressBar, ProgressStyle};
-use image::ImageFormat;
+use image::{ImageFormat, ImageReader};
 use std::sync::{Arc, Mutex};
 use std::process;
 use tokio::sync::Semaphore;
@@ -15,6 +16,7 @@ use colored::Colorize;
 use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::time::sleep;
+use serde_json::json;
 // use std::fmt::Write as FmtWrite;
 
 #[derive(Parser)]
@@ -37,16 +39,17 @@ struct Cli {
     file: String,
 
     /// download type, "juan" "hua" "fanwai" "current"
-    #[arg(short, long, value_enum, default_value_t = DlType::CURRENT)]
+    #[arg(short, long, value_enum, default_value_t = DlType::Current)]
     dl_type: DlType,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
 enum DlType {
-    JUAN,
-    HUA,
-    FANWAI,
-    CURRENT,
+    Juan,
+    Hua,
+    Fanwai,
+    Current,
+    Local,
 }
 
 // const RED: &str = "\x1b[31m";    // 红色
@@ -81,19 +84,152 @@ async fn main() {
     );
 
     match dl_type {
-        DlType::CURRENT => {
+        DlType::Current => {
             let _ = handle_current(url, element_selector, attr, file).await;
         }
-        DlType::JUAN => {
-            handle_juan_hua_fanwai(url, DlType::JUAN).await;
+        DlType::Juan => {
+            handle_juan_hua_fanwai(url, DlType::Juan).await;
         }
-        DlType::HUA => {
-            handle_juan_hua_fanwai(url, DlType::HUA).await;
+        DlType::Hua => {
+            handle_juan_hua_fanwai(url, DlType::Hua).await;
         }
-        DlType::FANWAI => {
-            handle_juan_hua_fanwai(url, DlType::FANWAI).await;
+        DlType::Fanwai => {
+            handle_juan_hua_fanwai(url, DlType::Fanwai).await;
         },
+        DlType::Local => {
+            let _ = handle_local(url).await;
+        }
     }
+}
+
+async fn handle_local (url: String) -> Result<bool>{
+    let output_path = format!("{url}_jpg");
+    let _ = fs::create_dir_all(output_path.to_string().replace(" ", "_"));
+
+    let mut dirs: Vec<serde_json::Value> = Vec::new();
+
+    for entry in fs::read_dir(url)? {
+        match entry {
+            Ok(dir) => {
+                if dir.file_type().unwrap().is_dir() {
+                    let dir_name = get_dir_name(PathBuf::from(dir.path().display().to_string())).unwrap();
+                    let json_object = json!({
+                        "name": dir_name,
+                        "path": dir.path().display().to_string(),
+                    });
+                    dirs.push(json_object);
+                }
+            },
+            Err(_) => {
+                eprintln!("{} {}",
+                    "Error: ".red(),
+                    "read local dir error!".red(),
+                );
+                process::exit(1);
+            },
+        };
+    }
+
+    dirs.sort_by(|a, b| {
+        let a_name = a.get("name").unwrap().as_str().unwrap();
+        let b_inner = b.get("name").unwrap().as_str().unwrap();
+
+        // 提取数字并进行比较
+        let a_number = extract_number(a_name);
+        let b_number = extract_number(b_inner);
+
+        a_number.cmp(&b_number)
+    });
+
+    for dir in dirs.iter() {
+        let name = dir.get("name").unwrap().as_str().unwrap();
+        let dir_path = dir.get("path").unwrap().as_str().unwrap();
+
+        println!("name is {}", name);
+
+        let new_dir_path = format!("{}/{}", output_path, name);
+        let new_dir_path_clone = Arc::new(format!("{}/{}", output_path, name));
+        let _ = fs::create_dir_all(new_dir_path);
+
+        let mut files: Vec<_> = fs::read_dir(dir_path).unwrap().filter_map(Result::ok).collect();
+
+        files.sort_by(|a, b| {
+            let binding = a.file_name();
+            let a_name = binding.to_str().unwrap();
+            let binding = b.file_name();
+            let b_name = binding.to_str().unwrap();
+
+            // 提取数字并进行比较
+            let a_number = extract_number(a_name);
+            let b_number = extract_number(b_name);
+
+            a_number.cmp(&b_number)
+        });
+
+        let bar = Arc::new(ProgressBar::new(files.len().try_into().unwrap()));
+        bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg} {duration}")
+            .unwrap());
+
+        let semaphore = Arc::new(Semaphore::new(20));
+        let mut tasks = vec![];
+        let entries = fs::read_dir(dir_path).unwrap();
+
+        for entry in entries {
+            match entry {
+                Ok(img) => {
+                    let path = img.path();
+                    let permit = semaphore.clone().acquire_owned().await.unwrap(); // 获取许可
+
+                    let new_dir_path_clone_arc = Arc::clone(&new_dir_path_clone);
+                    let bar_clone_arc = Arc::clone(&bar);
+                    let task = task::spawn(async move {
+                        let _permit = permit;
+                        if path.is_file() && is_image_file(&path) {
+                            let img_name = get_file_name_without_extension(&path).unwrap();
+                            let temp_img = ImageReader::open(&path).unwrap().decode().unwrap();
+                            let _ = temp_img.save(format!("{}/{}.jpg", new_dir_path_clone_arc, extract_number(&img_name)));
+                            bar_clone_arc.inc(1);
+                        }
+                    });
+
+                    tasks.push(task);
+                },
+                Err(_) => {
+                    bar.abandon();
+                    eprintln!("{} {}",
+                        "Error: ".red(),
+                        "read local dir image error!".red(),
+                    );
+                    process::exit(1);
+                },
+            }
+        }
+
+        for task in tasks {
+            let _ = task.await;
+        }
+
+        let finish_text = format!("{} is done!", files.len());
+        bar.finish_with_message(finish_text.bright_blue().to_string());
+    }
+
+    Ok(true)
+}
+
+fn get_dir_name<P: AsRef<Path>>(path: P) -> Option<String> {
+    let path = path.as_ref();
+    path.file_name().and_then(|name| name.to_str().map(|s| s.to_string()))
+}
+fn is_image_file(path: &Path) -> bool {
+    match path.extension().and_then(|s| s.to_str()) {
+        Some(ext) => matches!(ext.to_lowercase().as_str(), "jpg" | "jpeg" | "png" | "gif" | "bmp" | "tiff" | "webp"),
+        None => false,
+    }
+}
+fn get_file_name_without_extension(path: &Path) -> Option<String> {
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
 }
 
 async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
@@ -123,16 +259,17 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         }
 
         let text_to_find = match dl_type {
-            DlType::CURRENT => "",
-            DlType::JUAN => "单行本",
-            DlType::HUA => "单话",
-            DlType::FANWAI => "番外篇",
+            DlType::Current => "",
+            DlType::Juan => "单行本",
+            DlType::Hua => "单话",
+            DlType::Fanwai => "番外篇",
+            DlType::Local => "_",
         };
 
         if let Some(name) = comic_name {
             println!("{}{}", "comic name is ".bright_yellow(), name.to_string().bright_green());
             // create juan output directory
-            let _ = fs::create_dir_all(&(format!("./{}_{}", &name, text_to_find).replace(" ", "_")));
+            let _ = fs::create_dir_all(format!("./{}_{}", &name, text_to_find).replace(" ", "_"));
         } else {
             eprintln!("Error: can not find comic name!");
             process::exit(1);
@@ -216,7 +353,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                                 )
                                 .await {
                                     Ok(_) => {
-                                        println!("");
+                                        println!();
                                         break;
                                     },
                                     Err(e) => {
@@ -235,32 +372,6 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                     }
                 }
             }
-
-            // println!("{}", switcher.html());
-            // for a_btn in switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()) {
-            //     if let Some(src) = a_btn.value().attr("href") {
-            //         // println!("src is {}, inner is {}", src, a_btn.inner_html());
-            //         let mut complete_url = String::from(src);
-            //         complete_url.remove(0);
-            //         let host = String::from("https://www.antbyw.com");
-            //         let complete_url = host + &complete_url;
-            //         println!(
-            //             "complete_url is {}, name is {}",
-            //             complete_url,
-            //             a_btn.inner_html()
-            //         );
-
-            //         if let Some(ref comic_name_temp) = comic_name_2 {
-            //             handle_current(
-            //                 complete_url,
-            //                 ".uk-zjimg img".to_string(),
-            //                 "data-src".to_string(),
-            //                 format!("./{} {}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
-            //             )
-            //             .await;
-            //         }
-            //     }
-            // }
         }
     }
 }
@@ -345,12 +456,12 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
     let mut tasks = vec![];
 
     let bar = Arc::new(ProgressBar::new(url.len().try_into().unwrap()));
+    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg} {duration}")
+        .unwrap());
     // bar.set_style(ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
     //     .unwrap()
     //     .with_key("eta", |state: &ProgressState, w: &mut dyn FmtWrite| write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()));
 
-    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg} {duration}")
-        .unwrap());
         // .progress_chars("##-"));
 
     for (index, i) in url.iter().enumerate() {
