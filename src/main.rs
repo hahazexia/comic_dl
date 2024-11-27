@@ -43,6 +43,14 @@ struct Cli {
     dl_type: DlType,
 }
 
+/// range min value of the chapters
+// #[arg(short, long, default_value_t = 0.0)]
+// small: f32,
+
+/// range min value of the chapters
+// #[arg(short, long, default_value_t = std::f32::INFINITY)]
+// big: f32,
+
 #[derive(Debug, Clone, ValueEnum)]
 enum DlType {
     Juan,
@@ -57,7 +65,7 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=154663" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=146187" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 #[tokio::main]
@@ -70,6 +78,8 @@ async fn main() {
     let attr: String = cli.attr;
     let file: String = cli.file;
     let dl_type: DlType = cli.dl_type;
+    // let min: f32 = cli.small;
+    // let max: f32 = cli.big;
     let element_selector = format!("{element} img");
     println!(
         "{}is {}, {}is {}, {}is {}, {}is {}",
@@ -232,6 +242,7 @@ fn get_file_name_without_extension(path: &Path) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+// async fn handle_juan_hua_fanwai(url: String, dl_type: DlType, min: f32, max: f32) {
 async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
     // current only support antbyw.com
     if !url.contains("https://www.antbyw.com/") {
@@ -311,6 +322,16 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
 
                 a_number.cmp(&b_number)
             });
+
+            // let filtered_target: Vec<_> = target.iter()
+            //     .filter(|&&x| {
+            //         let x_inner = x.inner_html();
+            //         let x_number = extract_number(&x_inner);
+
+            //         (x_number as f32) > min && (x_number as f32) < max
+            //     })
+            //     .cloned()
+            //     .collect();
 
             for (i, a_btn) in target.iter().enumerate() {
                 if let Some(src) = a_btn.value().attr("href") {
