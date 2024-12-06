@@ -11,6 +11,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use image::{ImageFormat, ImageReader};
 use std::sync::{Arc, Mutex};
 use std::process;
+use std::process::Command;
 use tokio::sync::Semaphore;
 use colored::Colorize;
 use anyhow::{Context, Result};
@@ -58,6 +59,7 @@ enum DlType {
     Fanwai,
     Current,
     Local,
+    Upscale,
 }
 
 // const RED: &str = "\x1b[31m";    // 红色
@@ -67,6 +69,9 @@ enum DlType {
 
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=146187" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
+
+const UPSCAYL: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
+const UPSCAYL_MODEL: &str = "/Applications/Upscayl.app/Contents/Resources/models";
 
 #[tokio::main]
 async fn main() {
@@ -108,8 +113,116 @@ async fn main() {
         },
         DlType::Local => {
             let _ = handle_local(url).await;
-        }
+        },
+        DlType::Upscale => {
+            let _ = handle_upscale(url).await;
+        },
     }
+}
+
+async fn handle_upscale (url: String) -> Result<bool> {
+    let output_path = format!("{url}_upscale");
+    let _ = fs::create_dir_all(output_path.to_string().replace(" ", "_"));
+
+    let mut dirs: Vec<serde_json::Value> = Vec::new();
+
+    for entry in fs::read_dir(url)? {
+        match entry {
+            Ok(dir) => {
+                if dir.file_type().unwrap().is_dir() {
+                    let dir_name = get_dir_name(PathBuf::from(dir.path().display().to_string())).unwrap();
+                    let json_object = json!({
+                        "name": dir_name,
+                        "path": dir.path().display().to_string(),
+                    });
+                    dirs.push(json_object);
+                }
+            },
+            Err(_) => {
+                eprintln!("{} {}",
+                    "Error: ".red(),
+                    "read local dir error!".red(),
+                );
+                process::exit(1);
+            },
+        };
+    }
+
+    dirs.sort_by(|a, b| {
+        let a_name = a.get("name").unwrap().as_str().unwrap();
+        let b_inner = b.get("name").unwrap().as_str().unwrap();
+
+        // 提取数字并进行比较
+        let a_number = extract_number(a_name);
+        let b_number = extract_number(b_inner);
+
+        a_number.cmp(&b_number)
+    });
+
+    let bar = Arc::new(ProgressBar::new(dirs.len().try_into().unwrap()));
+    bar.set_style(ProgressStyle::with_template("[{elapsed_precise}] {bar:40.cyan/blue} {pos}/{len} {msg} {duration}")
+        .unwrap());
+
+    for dir in dirs.iter() {
+        let name = dir.get("name").unwrap().as_str().unwrap();
+        let dir_path = dir.get("path").unwrap().as_str().unwrap();
+
+        println!("name is {}", name);
+
+        let new_dir_path = format!("{}/{}", output_path, name);
+        let _ = fs::create_dir_all(&new_dir_path);
+        // upscayl-bin -i "输入目录" -o "输出目录" -c 50 -m "模型路径" -n "realesrgan-x4plus-anime" -f "png"
+        // Usage: upscayl-bin -i infile -o outfile [options]...
+
+        // -h                   show this help
+        // -i input-path        input image path (jpg/png/webp) or directory
+        // -o output-path       output image path (jpg/png/webp) or directory
+        // -z model-scale       scale according to the model (can be 2, 3, 4. default=4)
+        // -s output-scale      custom output scale (can be 2, 3, 4. default=4)
+        // -r resize            resize output to dimension (default=WxH:default), use '-r help' for more details
+        // -w width             resize output to a width (default=W:default), use '-r help' for more details
+        // -c compress          compression of the output image, default 0 and varies to 100
+        // -t tile-size         tile size (>=32/0=auto, default=0) can be 0,0,0 for multi-gpu
+        // -m model-path        folder path to the pre-trained models. default=models
+        // -n model-name        model name (default=realesrgan-x4plus, can be realesr-animevideov3 | realesrgan-x4plus-anime | realesrnet-x4plus or any other model)
+        // -g gpu-id            gpu device to use (default=auto) can be 0,1,2 for multi-gpu
+        // -j load:proc:save    thread count for load/proc/save (default=1:2:2) can be 1:2,2,2:2 for multi-gpu
+        // -x                   enable tta mode
+        // -f format            output image format (jpg/png/webp, default=ext/png)
+        // -v                   verbose output
+        let output = Command::new(UPSCAYL)
+            .arg("-i")
+            .arg(dir_path)
+            .arg("-o")
+            .arg(&new_dir_path)
+            .arg("-s")
+            .arg("2")
+            .arg("-c")
+            .arg("30")
+            .arg("-m")
+            .arg(UPSCAYL_MODEL)
+            .arg("-n")
+            .arg("realesrgan-x4fast")
+            .arg("-f")
+            .arg("jpg")
+            .output()
+            .expect("Failed to execute command");
+
+        // 处理输出
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            println!("Output: {}", stdout);
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            eprintln!("Error: {}", stderr);
+        }
+
+        bar.inc(1);
+    }
+    let finish_text = format!("{} is done!", dirs.len());
+    bar.finish_with_message(finish_text.bright_blue().to_string());
+
+    Ok(true)
 }
 
 async fn handle_local (url: String) -> Result<bool>{
@@ -275,6 +388,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
             DlType::Hua => "单话",
             DlType::Fanwai => "番外篇",
             DlType::Local => "_",
+            DlType::Upscale => "_",
         };
 
         if let Some(name) = comic_name {
