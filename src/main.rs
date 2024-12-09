@@ -18,7 +18,6 @@ use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::time::sleep;
 use serde_json::json;
-use std::thread;
 // use std::fmt::Write as FmtWrite;
 
 #[derive(Parser)]
@@ -69,6 +68,7 @@ enum DlType {
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
 // cargo run -- -u "C:/Users/hahaz/Downloads/帝王之子_单行本" -d "upscale"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=147507" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -219,9 +219,9 @@ async fn handle_upscale (url: String) -> Result<bool> {
             .arg("-o")
             .arg(&new_dir_path)
             .arg("-s")
-            .arg("2")
+            .arg("4")
             .arg("-c")
-            .arg("30")
+            .arg("50")
             .arg("-m")
             .arg(upscayl_model)
             .arg("-n")
