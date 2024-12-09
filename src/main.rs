@@ -67,7 +67,7 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=146187" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=147507" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const UPSCAYL: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -196,9 +196,9 @@ async fn handle_upscale (url: String) -> Result<bool> {
             .arg("-o")
             .arg(&new_dir_path)
             .arg("-s")
-            .arg("2")
+            .arg("4")
             .arg("-c")
-            .arg("30")
+            .arg("50")
             .arg("-m")
             .arg(UPSCAYL_MODEL)
             .arg("-n")
