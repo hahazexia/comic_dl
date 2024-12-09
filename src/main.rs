@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::time::sleep;
 use serde_json::json;
+use std::thread;
 // use std::fmt::Write as FmtWrite;
 
 #[derive(Parser)]
@@ -67,11 +68,14 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=146187" -d "juan"
+// cargo run -- -u "C:/Users/hahaz/Downloads/帝王之子_单行本" -d "upscale"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
-const UPSCAYL: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
-const UPSCAYL_MODEL: &str = "/Applications/Upscayl.app/Contents/Resources/models";
+const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
+const _UPSCAYL_MODEL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/models";
+
+const _UPSCAYL_WIN: &str = "D:/upscayl/resources/bin/upscayl-bin";
+const _UPSCAYL_MODEL_WIN: &str = "D:/upscayl/resources/models";
 
 #[tokio::main]
 async fn main() {
@@ -170,6 +174,11 @@ async fn handle_upscale (url: String) -> Result<bool> {
         println!("name is {}", name);
 
         let new_dir_path = format!("{}/{}", output_path, name);
+        let new_dir_path_obj = Path::new(&new_dir_path);
+        if new_dir_path_obj.is_dir() {
+            println!("{}: {}", "dir already exist, continue next".green(), &new_dir_path);
+            continue;
+        }
         let _ = fs::create_dir_all(&new_dir_path);
         // upscayl-bin -i "输入目录" -o "输出目录" -c 50 -m "模型路径" -n "realesrgan-x4plus-anime" -f "png"
         // Usage: upscayl-bin -i infile -o outfile [options]...
@@ -190,7 +199,21 @@ async fn handle_upscale (url: String) -> Result<bool> {
         // -x                   enable tta mode
         // -f format            output image format (jpg/png/webp, default=ext/png)
         // -v                   verbose output
-        let output = Command::new(UPSCAYL)
+        let upscayl;
+        let upscayl_model;
+
+        #[cfg(target_os = "windows")]
+        {
+            upscayl = _UPSCAYL_WIN;
+            upscayl_model = _UPSCAYL_MODEL_WIN;
+        }
+        #[cfg(target_os = "macos")]
+        {
+            UPSCAYL = UPSCAYL_MAC;
+            UPSCAYL_MODEL = UPSCAYL_MODEL_MAC;
+        }
+
+        let output = Command::new(upscayl)
             .arg("-i")
             .arg(dir_path)
             .arg("-o")
@@ -200,9 +223,9 @@ async fn handle_upscale (url: String) -> Result<bool> {
             .arg("-c")
             .arg("30")
             .arg("-m")
-            .arg(UPSCAYL_MODEL)
+            .arg(upscayl_model)
             .arg("-n")
-            .arg("realesrgan-x4fast")
+            .arg("4x-DWTP-ds-esrgan-5")
             .arg("-f")
             .arg("jpg")
             .output()
