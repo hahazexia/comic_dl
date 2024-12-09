@@ -2,7 +2,7 @@ use clap::{Parser, ValueEnum};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use reqwest::Client;
 use tokio::task;
-use std::fs;
+use std::{fs, thread};
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::{Cursor, Write};
@@ -67,8 +67,8 @@ enum DlType {
 // const RESET: &str = "\x1b[0m";   // 重置颜色
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
-// cargo run -- -u "C:/Users/hahaz/Downloads/帝王之子_单行本" -d "upscale"
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=147507" -d "juan"
+// cargo run -- -u "C:/Users/hahaz/Downloads/伤追之人_单行本" -d "upscale"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=147862" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -177,6 +177,7 @@ async fn handle_upscale (url: String) -> Result<bool> {
         let new_dir_path_obj = Path::new(&new_dir_path);
         if new_dir_path_obj.is_dir() {
             println!("{}: {}", "dir already exist, continue next".green(), &new_dir_path);
+            bar.inc(1);
             continue;
         }
         let _ = fs::create_dir_all(&new_dir_path);
@@ -219,13 +220,15 @@ async fn handle_upscale (url: String) -> Result<bool> {
             .arg("-o")
             .arg(&new_dir_path)
             .arg("-s")
-            .arg("4")
+            .arg("2")
             .arg("-c")
             .arg("50")
             .arg("-m")
             .arg(upscayl_model)
             .arg("-n")
             .arg("4x-DWTP-ds-esrgan-5")
+            .arg("-j")
+            .arg("1:1:1")
             .arg("-f")
             .arg("jpg")
             .output()
@@ -241,6 +244,7 @@ async fn handle_upscale (url: String) -> Result<bool> {
         }
 
         bar.inc(1);
+        thread::sleep(Duration::from_secs(30));
     }
     let finish_text = format!("{} is done!", dirs.len());
     bar.finish_with_message(finish_text.bright_blue().to_string());
