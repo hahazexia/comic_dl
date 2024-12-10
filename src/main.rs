@@ -68,7 +68,7 @@ enum DlType {
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
 // cargo run -- -u "C:/Users/hahaz/Downloads/伤追之人_单行本" -d "upscale"
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=147862" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=158935" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -210,8 +210,8 @@ async fn handle_upscale (url: String) -> Result<bool> {
         }
         #[cfg(target_os = "macos")]
         {
-            UPSCAYL = UPSCAYL_MAC;
-            UPSCAYL_MODEL = UPSCAYL_MODEL_MAC;
+            upscayl = _UPSCAYL_MAC;
+            upscayl_model = _UPSCAYL_MODEL_MAC;
         }
 
         let output = Command::new(upscayl)
