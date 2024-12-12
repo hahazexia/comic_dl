@@ -2,6 +2,7 @@ use clap::{Parser, ValueEnum};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_AGENT};
 use reqwest::Client;
 use tokio::task;
+use std::collections::HashMap;
 use std::{fs, thread};
 use std::path::{Path, PathBuf};
 use std::fs::File;
@@ -18,6 +19,8 @@ use anyhow::{Context, Result};
 use std::time::Duration;
 use tokio::time::sleep;
 use serde_json::json;
+use tokio::time::timeout;
+use bytes::Bytes;
 // use std::fmt::Write as FmtWrite;
 
 #[derive(Parser)]
@@ -68,7 +71,7 @@ enum DlType {
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
 // cargo run -- -u "C:/Users/hahaz/Downloads/伤追之人_单行本" -d "upscale"
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=158935" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=182663" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -494,41 +497,40 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
 
                     if let Some(ref comic_name_temp) = comic_name_2 {
                         let dir_path = format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html());
-                        let path = Path::new(&dir_path);
+                        // let path = Path::new(&dir_path);
 
                         println!("{}", dir_path.to_string().bright_black().on_bright_white());
 
-                        if path.is_dir() {
-                            println!("{}: {}", "dir already exist, continue next".green(), dir_path);
-                            continue;
-                        } else {
-                            let max_retries = 3; // 最大重试次数
-                            let mut attempts = 0;
-                            loop {
-                                attempts += 1;
+                        // if path.is_dir() {
+                        //     println!("{}: {}", "dir already exist, continue next".green(), dir_path);
+                        //     continue;
+                        // } else {}
+                        let max_retries = 3; // 最大重试次数
+                        let mut attempts = 0;
+                        loop {
+                            attempts += 1;
 
-                                match handle_current(
-                                    complete_url.clone(),
-                                    ".uk-zjimg img".to_string(),
-                                    "data-src".to_string(),
-                                    format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
-                                )
-                                .await {
-                                    Ok(_) => {
-                                        println!();
-                                        break;
-                                    },
-                                    Err(e) => {
-                                        if attempts < max_retries {
-                                            println!("{} Attempt {}/{} failed: {}. Retrying...", "Error: ".red(), attempts, max_retries, e);
-                                            sleep(Duration::from_secs(2)).await; // 等待 2 秒后重试
-                                            continue;
-                                        } else {
-                                            eprintln!("{} All {} attempts failed: {}", "Error: ".red(), max_retries, e);
-                                            process::exit(1);
-                                        }
-                                    },
-                                }
+                            match handle_current(
+                                complete_url.clone(),
+                                ".uk-zjimg img".to_string(),
+                                "data-src".to_string(),
+                                format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
+                            )
+                            .await {
+                                Ok(_) => {
+                                    println!();
+                                    break;
+                                },
+                                Err(e) => {
+                                    if attempts < max_retries {
+                                        println!("{} Attempt {}/{} failed: {}. Retrying...", "Error: ".red(), attempts, max_retries, e);
+                                        sleep(Duration::from_secs(2)).await; // 等待 2 秒后重试
+                                        continue;
+                                    } else {
+                                        eprintln!("{} All {} attempts failed: {}", "Error: ".red(), max_retries, e);
+                                        process::exit(1);
+                                    }
+                                },
                             }
                         }
                     }
@@ -639,16 +641,86 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
         let task = tokio::spawn(async move {
             let _permit = semaphore.acquire().await.unwrap();
 
+            let name = format!("{}/{}.jpg", &file_path, &index);
+            if Path::new(&name).exists() {
+                // println!("{} jpg is already exist, next",
+                //     index.to_string().green(),
+                // );
+                bar.inc(1);
+                return;
+            }
+
+            let mut res;
+            let mut count = 0;
+            let messages = vec![
+                "请求失败，状态码",
+                "请求错误",
+                "请求超时",
+            ];
+            let mut err_counts: HashMap<&str, usize> = HashMap::new();
+            loop {
+                count += 1;
+                let response_result = timeout(
+                    Duration::from_secs(20),
+                    client.get(&temp_url).headers(headers.clone()).send()
+                ).await;
+
+                match response_result {
+                    Ok(Ok(response)) => {
+                        if response.status().is_success() {
+                            res = response.bytes().await.unwrap();
+                            // 在这里处理获取到的字节，例如保存到文件
+                            // println!("成功获取图片，大小: {} bytes", res.len());
+                            break; // 成功后退出循环
+                        } else {
+                            res = Bytes::from("");
+                            if let Some(msg_indx) = messages.get(0) {
+                                *err_counts.entry(msg_indx).or_insert(0) += 1;
+                            }
+                            // eprintln!("请求失败，状态码: {}", response.status());
+                        }
+                    }
+                    Ok(Err(_e)) => {
+                        res = Bytes::from("");
+                        if let Some(msg_indx) = messages.get(1) {
+                            *err_counts.entry(msg_indx).or_insert(0) += 1;
+                        }
+                        // eprintln!("请求错误: {}", _e);
+                    }
+                    Err(_) => {
+                        res = Bytes::from("");
+                        if let Some(msg_indx) = messages.get(2) {
+                            *err_counts.entry(msg_indx).or_insert(0) += 1;
+                        }
+                        // eprintln!("请求超时");
+                    }
+                }
+
+                if count > 10 {
+                    break;
+                }
+
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+
+            if res.len() == 0 {
+                eprintln!("attempt {} times, but all failed, url is {}, index is {}", count, &temp_url, &index);
+                for (msg, index) in err_counts {
+                    println!("{}: {} 次", msg.red(), index.to_string().yellow());
+                }
+                return;
+            }
+
             // println!("downloading {}", temp_url);
-            let response = client
-                .get(temp_url)
-                .headers(headers)
-                .send()
-                .await
-                .unwrap()
-                .bytes()
-                .await
-                .unwrap();
+            // let response = client
+            //     .get(&temp_url)
+            //     .headers(headers)
+            //     .send()
+            //     .await
+            //     .unwrap()
+            //     .bytes()
+            //     .await
+            //     .unwrap();
 
             let name = format!("{}/{}", file_path, index);
             // let path = Path::new(&name);
@@ -664,7 +736,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
             };
 
             // let format_result = image::guess_format(&response).unwrap();
-            let format_result = match image::guess_format(&response) {
+            let format_result = match image::guess_format(&res) {
                 Ok(format) => {
                     format
                 },
@@ -676,6 +748,8 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 }
             };
 
+            // println!("format_result is {:?}", &format_result);
+
             if format_to_string(&format_result) == "other unknown format" {
                 eprintln!("!!!!!!! Unknown image format, index = {}", index);
             }
@@ -686,7 +760,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 img_format = format_result;
             }
 
-            let img = image::load(Cursor::new(&response), img_format);
+            let img = image::load(Cursor::new(&res), img_format);
 
             match img {
                 Ok(img) => {
@@ -698,17 +772,18 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 Err(e) => {
                     // this maybe the web image is error, reqwest library can not download it
                     eprintln!(
-                        "{} image save is error! ImageError is {} {} is {}",
+                        "{} image save is error! ImageError is {} {} is {} url is {}",
                         "Error: ".red(),
                         e.to_string().yellow(),
                         "index ".red(),
                         index.to_string().green(),
+                        &temp_url,
                     );
                     // althrough image download failed, still save the damaged image as a placeholder, for replacing it after all is done
                     let mut file = File::create(
                         Path::new(&format!("{}.{}", name, ext)),
                     ).unwrap();
-                    file.write_all(&response).unwrap();
+                    file.write_all(&res).unwrap();
                     return;
                     // process::exit(1);
                 }
