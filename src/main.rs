@@ -71,7 +71,7 @@ enum DlType {
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
 // cargo run -- -u "C:/Users/hahaz/Downloads/阴兽_单行本" -d "upscale"
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=143364" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=189292" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -472,7 +472,7 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         };
 
         if let Some(name) = comic_name {
-            println!("{}{}", "comic name is ".bright_yellow(), name.to_string().bright_green());
+            println!("{}{}", "comic name is ".yellow(), name.to_string().bright_green());
             // create juan output directory
             let _ = fs::create_dir_all(format!("./{}_{}", &name, text_to_find).replace(" ", "_"));
         } else {
@@ -536,8 +536,8 @@ async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                     let complete_url = host + &complete_url;
                     println!(
                         "{} {} {}is {}, {}is {}",
-                        "num".red(),
-                        format!("{}", i + 1).red(),
+                        "num".yellow(),
+                        format!("{}", i + 1).yellow(),
                         "complete_url ".purple(),
                         complete_url,
                         "name ".purple(),
@@ -640,7 +640,7 @@ async fn handle_current(url: String, element_selector: String, attr: String, fil
     // println!("img length is {}", img_v.len(),);
     // println!("img count on page is {}", count.unwrap());
     if let Some(image_count_temp) = image_count {
-        println!("{}{:?}", "image_count is ".bright_red(), image_count_temp.inner_html());
+        println!("{}{:?}", "image_count is ".yellow(), image_count_temp.inner_html());
     }
 
     down_img(img_v, &format!("./{}", &file)).await;
@@ -879,9 +879,9 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
             eprintln!(
                 "{} {} {} {} image format is unknown",
                 "num ".red(),
-                (i + 1).to_string().bright_yellow(),
+                (i + 1).to_string().yellow(),
                 "index ".red(),
-                (err + 1).to_string().bright_yellow(),
+                (err + 1).to_string().yellow(),
             );
         }
     }
