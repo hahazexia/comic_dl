@@ -71,7 +71,7 @@ enum DlType {
 // const YELLOW: &str = "\x1b[33m"; // 黄色
 
 // cargo run -- -u "C:/Users/hahaz/Downloads/阴兽_单行本" -d "upscale"
-// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=142838" -d "juan"
+// cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=143364" -d "juan"
 // cargo run -- -u "https://www.antbyw.com/plugin.php?id=jameson_manhua&a=read&kuid=152174&zjid=916038"
 
 const _UPSCAYL_MAC: &str = "/Applications/Upscayl.app/Contents/Resources/bin/upscayl-bin";
@@ -706,6 +706,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 "请求失败，状态码",
                 "请求错误",
                 "请求超时",
+                "字节转换失败",
             ];
             let mut err_counts: HashMap<&str, usize> = HashMap::new();
             loop {
@@ -718,7 +719,20 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                 match response_result {
                     Ok(Ok(response)) => {
                         if response.status().is_success() {
-                            res = response.bytes().await.unwrap();
+                            let res_temp = response.bytes().await;
+
+                            match res_temp {
+                                Ok(bytes) => {
+                                    res = bytes;
+                                }
+                                Err(_e) => {
+                                    res = Bytes::from("");
+                                    // eprintln!("bytes error is {:?}", e);
+                                    if let Some(msg_indx) = messages.get(3) {
+                                        *err_counts.entry(msg_indx).or_insert(3) += 1;
+                                    }
+                                }
+                            }
                             // 在这里处理获取到的字节，例如保存到文件
                             // println!("成功获取图片，大小: {} bytes", res.len());
                             break; // 成功后退出循环
@@ -754,10 +768,12 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
             }
 
             if res.len() == 0 {
-                eprintln!("attempt {} times, but all failed, url is {}, index is {}", count, &temp_url, &index);
+                eprintln!("attempt {} times, but failed, url is {}, index is {}", count, &temp_url, &index);
                 for (msg, index) in err_counts {
                     println!("{}: {} 次", msg.red(), index.to_string().yellow());
                 }
+                let mut img_format_error_clone_lock = img_format_error_clone.lock().unwrap();
+                img_format_error_clone_lock.push(index);
                 return;
             }
 
@@ -818,6 +834,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
                     let jpg_bytes = img.to_rgb8(); // 转换为 RGB 格式
                     let mut output_file = File::create(Path::new(&format!("{}.jpg", name))).unwrap();
                     jpg_bytes.write_to(&mut output_file, ImageFormat::Jpeg).unwrap();
+                    bar.inc(1);
                 },
                 Err(e) => {
                     // this maybe the web image is error, reqwest library can not download it
@@ -841,7 +858,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
 
             // let mut file = File::create(path).unwrap();
             // file.write_all(&response).unwrap();
-            bar.inc(1);
+            // bar.inc(1);
         });
 
         tasks.push(task);
@@ -851,7 +868,7 @@ async fn down_img(url: Vec<&str>, file_path: &str) {
         let _ = task.await;
     }
 
-    let errors =img_format_error.lock().unwrap();
+    let errors = img_format_error.lock().unwrap();
     if errors.is_empty() {
         let finish_text = format!("{} is done!", url.len());
 
