@@ -1,6 +1,7 @@
 use clap::Parser;
 use colored::Colorize;
 
+mod mangadex;
 mod dl_type;
 mod utils;
 mod local;
@@ -8,6 +9,7 @@ mod antbyw;
 use local::{handle_upscale, handle_local};
 use dl_type::DlType;
 use antbyw::{handle_current, handle_juan_hua_fanwai};
+use mangadex::handle_mangadex;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -78,24 +80,29 @@ async fn main() {
         file,
     );
 
-    match dl_type {
-        DlType::Current => {
-            let _ = handle_current(url, element_selector, attr, file).await;
+    if url.contains("mangadex.org") {
+        handle_mangadex(url).await;
+    } else {
+        match dl_type {
+            DlType::Current => {
+                let _ = handle_current(url, element_selector, attr, file).await;
+            }
+            DlType::Juan => {
+                handle_juan_hua_fanwai(url, DlType::Juan).await;
+            }
+            DlType::Hua => {
+                handle_juan_hua_fanwai(url, DlType::Hua).await;
+            }
+            DlType::Fanwai => {
+                handle_juan_hua_fanwai(url, DlType::Fanwai).await;
+            },
+            DlType::Local => {
+                let _ = handle_local(url).await;
+            },
+            DlType::Upscale => {
+                let _ = handle_upscale(url).await;
+            },
         }
-        DlType::Juan => {
-            handle_juan_hua_fanwai(url, DlType::Juan).await;
-        }
-        DlType::Hua => {
-            handle_juan_hua_fanwai(url, DlType::Hua).await;
-        }
-        DlType::Fanwai => {
-            handle_juan_hua_fanwai(url, DlType::Fanwai).await;
-        },
-        DlType::Local => {
-            let _ = handle_local(url).await;
-        },
-        DlType::Upscale => {
-            let _ = handle_upscale(url).await;
-        },
     }
+
 }
