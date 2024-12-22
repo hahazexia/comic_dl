@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::fs::File;
-use std::io::{Cursor, Write};
+use std::io::{BufReader, Cursor, Write};
 use indicatif::{ProgressBar, ProgressStyle};
 use image::ImageFormat;
 use std::sync::{Arc, Mutex};
@@ -16,15 +16,49 @@ use std::time::Duration;
 use tokio::time::sleep;
 use tokio::time::timeout;
 use bytes::Bytes;
+use serde::{Deserialize, Serialize};
 
 use crate::utils::{
     format_to_string,
     handle_url,
     handle_img_extension,
     extract_number,
+    create_json_file_if_not_exists,
 };
 
 use crate::dl_type::DlType;
+
+#[derive(Deserialize, Serialize, Default, Debug)]
+#[allow(dead_code)]
+struct CacheImgCount {
+    name: String,
+    count: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[allow(dead_code)]
+struct Cache {
+    juan: HashMap<String,String>,
+    hua: HashMap<String,String>,
+    fanwai: HashMap<String,String>,
+}
+
+impl Default for Cache {
+    fn default() -> Self {
+        Cache {
+            juan: HashMap::default(),
+            hua: HashMap::default(),
+            fanwai: HashMap::default(),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Default, Debug)]
+#[allow(dead_code)]
+pub struct DownLoadImgRes {
+    errors: Vec<usize>,
+    image_count: String,
+}
 
 pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
     // current only support antbyw.com
@@ -44,12 +78,10 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         let mut juan_switcher = None;
 
         let mut comic_name = None;
-        let mut comic_name_2 = None;
         let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
         let comic_name_temp = document.select(name_selector);
         for name in comic_name_temp {
             comic_name = Some(name.inner_html().replace(" ", "_"));
-            comic_name_2 = Some(name.inner_html().replace(" ", "_"));
         }
 
         let text_to_find = match dl_type {
@@ -61,14 +93,40 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
             DlType::Upscale => "_",
         };
 
-        if let Some(name) = comic_name {
+        let cache_file;
+
+        if let Some(name) = &comic_name {
             println!("{}{}", "comic name is ".yellow(), name.to_string().bright_green());
             // create juan output directory
             let _ = fs::create_dir_all(format!("./{}_{}", &name, text_to_find).replace(" ", "_"));
+            cache_file = format!("./{}_{}.json", &name, &text_to_find).replace(" ", "_");
+            let _ = create_json_file_if_not_exists(&cache_file);
         } else {
             eprintln!("Error: can not find comic name!");
             process::exit(1);
         }
+
+        // let file = File::open(&cache_file).expect("Unable to open file");
+        // let reader = BufReader::new(file);
+        // let mut _cache: Cache = serde_json::from_reader(reader).unwrap();
+
+        let file = match File::open(&cache_file) {
+            Ok(file) => file,
+            Err(_) => {
+                let new_file = File::create(&cache_file).unwrap();
+                let default_cache = Cache::default();
+                let _ = serde_json::to_writer(&new_file, &default_cache);
+                new_file
+            }
+        };
+
+        let reader = BufReader::new(file);
+        let mut _cache: Cache = match serde_json::from_reader(reader) {
+            Ok(cache) => cache,
+            Err(_) => {
+                Cache::default()
+            }
+        };
 
         for nav in juan_nav {
             if let Some(t) = nav.text().next() {
@@ -124,17 +182,36 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                         a_btn.inner_html()
                     );
 
-
-                    if let Some(ref comic_name_temp) = comic_name_2 {
+                    if let Some(ref comic_name_temp) = &comic_name {
                         let dir_path = format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html());
-                        // let path = Path::new(&dir_path);
+
+                        match dl_type {
+                            DlType::Juan => {
+                                if let Some(count) = _cache.juan.get(&dir_path) {
+                                    println!("{}{}{}, {}", &dir_path.green(), "count is ".yellow(), count.green(), "alread done".yellow());
+                                    continue;
+                                }
+                                ""
+                            }
+                            DlType::Hua => {
+                                if let Some(count) = _cache.hua.get(&dir_path) {
+                                    println!("{}{}{}, {}", &dir_path.green(), " count is ".yellow(), count.green(), " alread done".blue());
+                                    continue;
+                                }
+                                ""
+                            },
+                            DlType::Fanwai => {
+                                if let Some(count) = _cache.fanwai.get(&dir_path) {
+                                    println!("{}{}{}, {}", &dir_path.green(), "count is ".yellow(), count.green(), "alread done".yellow());
+                                    continue;
+                                }
+                                ""
+                            },
+                            _ => {""}
+                        };
 
                         println!("{}", dir_path.to_string().bright_black().on_bright_white());
 
-                        // if path.is_dir() {
-                        //     println!("{}: {}", "dir already exist, continue next".green(), dir_path);
-                        //     continue;
-                        // } else {}
                         let max_retries = 3; // 最大重试次数
                         let mut attempts = 0;
                         loop {
@@ -144,11 +221,30 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                                 complete_url.clone(),
                                 ".uk-zjimg img".to_string(),
                                 "data-src".to_string(),
-                                format!("./{}_{}/{}", *comic_name_temp, text_to_find, a_btn.inner_html()),
+                                dir_path.clone(),
                             )
                             .await {
-                                Ok(_) => {
-                                    println!();
+                                Ok(errors) => {
+                                    if errors.errors.is_empty() {
+                                        match dl_type {
+                                            DlType::Juan => {
+                                                _cache.juan.insert(dir_path, errors.image_count);
+                                                ""
+                                            }
+                                            DlType::Hua => {
+                                                _cache.hua.insert(dir_path, errors.image_count);
+                                                ""
+                                            },
+                                            DlType::Fanwai => {
+                                                _cache.fanwai.insert(dir_path, errors.image_count);
+                                                ""
+                                            },
+                                            _ => {""}
+                                        };
+
+                                        let file = File::create(&cache_file).unwrap();
+                                        serde_json::to_writer(file, &_cache).unwrap();
+                                    }
                                     break;
                                 },
                                 Err(e) => {
@@ -167,11 +263,14 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                 }
             }
         }
+
+        let file = File::create(&cache_file).unwrap();
+        serde_json::to_writer(file, &_cache).unwrap();
     }
 }
 
-pub async fn handle_current(url: String, element_selector: String, attr: String, file: String) -> Result<()> {
-    let client = Client::builder()
+pub async fn handle_current(url: String, element_selector: String, attr: String, file: String) -> Result<DownLoadImgRes> {
+    let client: Client = Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
     let response = client.get(&url).send().await.context("Failed to send request".red())?;
@@ -212,15 +311,23 @@ pub async fn handle_current(url: String, element_selector: String, attr: String,
 
     // println!("img length is {}", img_v.len(),);
     // println!("img count on page is {}", count.unwrap());
+    let img_count;
     if let Some(image_count_temp) = image_count {
+        img_count = image_count_temp.inner_html();
         println!("{}{:?}", "image_count is ".yellow(), image_count_temp.inner_html());
+    } else {
+        img_count = "".to_string();
     }
 
-    down_img(img_v, &format!("./{}", &file)).await;
-    Ok(())
+    let errors = down_img(img_v, &format!("./{}", &file)).await;
+
+    let mut res: DownLoadImgRes = DownLoadImgRes::default();
+    res.errors = errors;
+    res.image_count = img_count;
+    Ok(res)
 }
 
-pub async fn down_img(url: Vec<&str>, file_path: &str) {
+pub async fn down_img<'a>(url: Vec<&str>, file_path: &str) -> Vec<usize> {
     let _ = fs::create_dir_all(file_path);
     let client = Client::new();
     let domain = handle_url(url[0]);
@@ -442,6 +549,7 @@ pub async fn down_img(url: Vec<&str>, file_path: &str) {
     }
 
     let errors = img_format_error.lock().unwrap();
+    let temp_errors = errors.clone();
     if errors.is_empty() {
         let finish_text = format!("{} is done!", url.len());
 
@@ -458,5 +566,7 @@ pub async fn down_img(url: Vec<&str>, file_path: &str) {
             );
         }
     }
+
+    temp_errors
 }
 
