@@ -1,3 +1,5 @@
+use std::process;
+
 use clap::Parser;
 use colored::Colorize;
 
@@ -10,6 +12,7 @@ use local::{handle_upscale, handle_local};
 use dl_type::DlType;
 use antbyw::{handle_current, handle_juan_hua_fanwai};
 use mangadex::handle_mangadex;
+use utils::get_second_level_domain;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -80,29 +83,55 @@ async fn main() {
         file,
     );
 
-    if url.contains("mangadex.org") {
-        handle_mangadex(url).await;
-    } else {
-        match dl_type {
-            DlType::Current => {
-                let _ = handle_current(url, element_selector, attr, file).await;
-            }
-            DlType::Juan => {
-                handle_juan_hua_fanwai(url, DlType::Juan).await;
-            }
-            DlType::Hua => {
-                handle_juan_hua_fanwai(url, DlType::Hua).await;
-            }
-            DlType::Fanwai => {
-                handle_juan_hua_fanwai(url, DlType::Fanwai).await;
-            },
-            DlType::Local => {
-                let _ = handle_local(url).await;
-            },
-            DlType::Upscale => {
-                let _ = handle_upscale(url).await;
-            },
+    match dl_type {
+        DlType::Local => {
+            let _ = handle_local(url).await;
+            return;
+        },
+        DlType::Upscale => {
+            let _ = handle_upscale(url).await;
+            return;
+        },
+        _ => {}
+    }
+
+    let site_name_temp = get_second_level_domain(&url);
+    let handled_site_name;
+
+    match site_name_temp {
+        Some(site_name) => {
+            handled_site_name = site_name;
+        }
+        None => {
+            eprintln!("{}", "get second level domain failed".red());
+            process::exit(1);
         }
     }
 
+    match handled_site_name.as_str() {
+        "antbyw" => {
+            match dl_type {
+                DlType::Current => {
+                    let _ = handle_current(url, element_selector, attr, file).await;
+                }
+                DlType::Juan => {
+                    handle_juan_hua_fanwai(url, DlType::Juan).await;
+                }
+                DlType::Hua => {
+                    handle_juan_hua_fanwai(url, DlType::Hua).await;
+                }
+                DlType::Fanwai => {
+                    handle_juan_hua_fanwai(url, DlType::Fanwai).await;
+                },
+                _ => {}
+            }
+        }
+        "mangadex" => {
+            let _ = handle_mangadex(url).await;
+        }
+        _ => {
+            eprintln!("{}", "unknown manga site, not support".red());
+            process::exit(1);
+        }
+    }
 }

@@ -95,3 +95,18 @@ pub fn get_file_name_without_extension(path: &Path) -> Option<String> {
         .and_then(|s| s.to_str())
         .map(|s| s.to_string())
 }
+
+// 获取二级域名
+pub fn get_second_level_domain(url_str: &str) -> Option<String> {
+    let url = Url::parse(url_str).ok()?;
+
+    let host = url.host_str()?;
+
+    let parts: Vec<&str> = host.split('.').collect();
+
+    if parts.len() >= 2 {
+        Some(parts[parts.len() - 2].to_string())
+    } else {
+        None
+    }
+}
