@@ -198,7 +198,7 @@ async fn handle_mangadex_chapter (chapter_url: String, serial_hashmap: &HashMap<
 pub async fn down_img(url: Vec<String>, file_path: &str) {
     let _ = fs::create_dir_all(&file_path);
     let client = Client::new();
-    let domain = handle_url(&url[0]);
+    let _domain = handle_url(&url[0]);
     let ext = handle_img_extension(&url[0]);
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"));
@@ -209,7 +209,7 @@ pub async fn down_img(url: Vec<String>, file_path: &str) {
         HeaderValue::from_static("no-cors"),
     );
 
-    println!("domain is {domain}, ext is {ext}");
+    // println!("domain is {domain}, ext is {ext}");
 
     let img_format_error = Arc::new(Mutex::new(Vec::new()));
 
