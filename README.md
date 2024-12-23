@@ -40,4 +40,4 @@ cargo run -- -u "https://mangadex.org/title/40bc649f-7b49-4645-859e-6cd94136e722
 
 ## Changelog
 
-* `version 1.0.0` support antbyw and mangadex, antbyw download have .json cache file.
+* `version 1.0.0` Support antbyw and mangadex, antbyw download have .json cache file. Support local image file convert to jpg format. Support local image upscale by [Upscayl](https://github.com/upscayl/upscayl).
