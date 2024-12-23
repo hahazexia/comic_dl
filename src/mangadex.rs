@@ -148,7 +148,16 @@ pub async fn handle_mangadex(url: String) -> Result<()> {
             }
         }
     }
-    // dbg!(&serial_hashmap);
+
+    url_vec.sort_by(|a, b| {
+        let a_info = serial_hashmap.get(a).unwrap();
+        let b_info = serial_hashmap.get(b).unwrap();
+        let a_volume = a_info.volume.parse::<i32>().unwrap_or_default();
+        let a_chapter = a_info.chapter.parse::<i32>().unwrap_or_default();
+        let b_volume = b_info.volume.parse::<i32>().unwrap_or_default();
+        let b_chapter = b_info.chapter.parse::<i32>().unwrap_or_default();
+        a_volume.cmp(&b_volume).then_with(|| a_chapter.cmp(&b_chapter))
+    });
 
     println!("{}{}", "comic name is ".bright_yellow(), comic_name.bright_green());
 
