@@ -20,25 +20,25 @@ use crate::utils::{format_to_string, handle_img_extension, handle_url};
 
 /**
  * Aggregate response
- * {
-    "result": "ok",
-    "volumes": {
-        "1": {
-            "volume": "1",
-            "count": 11,
-            "chapters": {
-                "2": {
-                    "chapter": "2",
-                    "id": "65f8c566-acc9-4acc-8d43-eca95ddda001",
-                    "others": [
-                        "0b62b078-71a0-4385-b904-589fc8ee064b"
-                    ],
-                    "count": 2
+    {
+        "result": "ok",
+        "volumes": {
+            "1": {
+                "volume": "1",
+                "count": 11,
+                "chapters": {
+                    "2": {
+                        "chapter": "2",
+                        "id": "65f8c566-acc9-4acc-8d43-eca95ddda001",
+                        "others": [
+                            "0b62b078-71a0-4385-b904-589fc8ee064b"
+                        ],
+                        "count": 2
+                    }
                 }
             }
         }
     }
-}
 */
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
@@ -73,19 +73,19 @@ struct SerialHashmap {
 
 
 /**
- * {
-    "result": "ok",
-    "baseUrl": "https:\/\/cmdxd98sb0x3yprd.mangadex.network",
-    "chapter": {
-        "hash": "3541196eaeb8a67e9b801a152c24c161",
-        "data": [
-            "1-3bd7d1a9fd25d13a3d1d50f95536eb5463f93419b161b4512e89781a6f1ad3fa.png",
-        ],
-        "dataSaver": [
-            "1-0fee13609ee90f2f6b5203eee5cf91d865b0aa287c7a26a384b91bcc717b89ab.jpg",
-        ]
+    {
+        "result": "ok",
+        "baseUrl": "https:\/\/cmdxd98sb0x3yprd.mangadex.network",
+        "chapter": {
+            "hash": "3541196eaeb8a67e9b801a152c24c161",
+            "data": [
+                "1-3bd7d1a9fd25d13a3d1d50f95536eb5463f93419b161b4512e89781a6f1ad3fa.png",
+            ],
+            "dataSaver": [
+                "1-0fee13609ee90f2f6b5203eee5cf91d865b0aa287c7a26a384b91bcc717b89ab.jpg",
+            ]
+        }
     }
-}
  */
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
@@ -136,7 +136,7 @@ pub async fn handle_mangadex(url: String) -> Result<()> {
                 volume: volume.to_string(),
                 chapter: chapter.chapter.clone(),
             });
-            if chapter.others.len() > 0 {
+            if !chapter.others.is_empty() {
                 for (index, other) in chapter.others.iter().enumerate() {
                     let chapter_url = format!("https://mangadex.org/chapter/{}/{}", &other, &chapter.chapter);
                     url_vec.push(chapter_url.clone());
@@ -188,7 +188,7 @@ async fn handle_mangadex_chapter (chapter_url: String, serial_hashmap: &HashMap<
 
     let base_url = source.base_url;
     let base_hash = source.chapter.hash;
-    for (_index, img) in source.chapter.data.iter().enumerate() {
+    for img in source.chapter.data.iter() {
         let temp = format!("{}/data/{}/{}", base_url, base_hash, img);
         urls.push(temp);
     }
@@ -205,7 +205,7 @@ async fn handle_mangadex_chapter (chapter_url: String, serial_hashmap: &HashMap<
 
 
 pub async fn down_img(url: Vec<String>, file_path: &str) {
-    let _ = fs::create_dir_all(&file_path);
+    let _ = fs::create_dir_all(file_path);
     let client = Client::new();
     let _domain = handle_url(&url[0]);
     let ext = handle_img_extension(&url[0]);
@@ -295,7 +295,7 @@ pub async fn down_img(url: Vec<String>, file_path: &str) {
                             break; // 成功后退出循环
                         } else {
                             res = Bytes::from("");
-                            if let Some(msg_indx) = messages.get(0) {
+                            if let Some(msg_indx) = messages.first() {
                                 *err_counts.entry(msg_indx).or_insert(0) += 1;
                             }
                             // eprintln!("请求失败，状态码: {}", response.status());
@@ -325,7 +325,7 @@ pub async fn down_img(url: Vec<String>, file_path: &str) {
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
 
-            if res.len() == 0 {
+            if res.is_empty() {
                 eprintln!("attempt {} times, but failed, url is {}, index is {}", count, &temp_url, &index);
                 for (msg, index) in err_counts {
                     println!("{}: {} 次", msg.red(), index.to_string().yellow());

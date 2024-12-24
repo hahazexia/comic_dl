@@ -121,12 +121,9 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         };
 
         let reader = BufReader::new(file);
-        let mut _cache: Cache = match serde_json::from_reader(reader) {
-            Ok(cache) => cache,
-            Err(_) => {
-                Cache::default()
-            }
-        };
+        let mut _cache: Cache = serde_json::from_reader(reader).unwrap_or_else(|_| {
+            Cache::default()
+        });
 
         for nav in juan_nav {
             if let Some(t) = nav.text().next() {
@@ -321,9 +318,10 @@ pub async fn handle_current(url: String, element_selector: String, attr: String,
 
     let errors = down_img(img_v, &format!("./{}", &file)).await;
 
-    let mut res: DownLoadImgRes = DownLoadImgRes::default();
-    res.errors = errors;
-    res.image_count = img_count;
+    let res: DownLoadImgRes = DownLoadImgRes {
+        errors,
+        image_count: img_count,
+    };
     Ok(res)
 }
 
@@ -418,7 +416,7 @@ pub async fn down_img<'a>(url: Vec<&str>, file_path: &str) -> Vec<usize> {
                             break; // 成功后退出循环
                         } else {
                             res = Bytes::from("");
-                            if let Some(msg_indx) = messages.get(0) {
+                            if let Some(msg_indx) = messages.first() {
                                 *err_counts.entry(msg_indx).or_insert(0) += 1;
                             }
                             // eprintln!("请求失败，状态码: {}", response.status());
@@ -447,7 +445,7 @@ pub async fn down_img<'a>(url: Vec<&str>, file_path: &str) -> Vec<usize> {
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
 
-            if res.len() == 0 {
+            if res.is_empty() {
                 eprintln!("attempt {} times, but failed, url is {}, index is {}", count, &temp_url, &index);
                 for (msg, index) in err_counts {
                     println!("{}: {} 次", msg.red(), index.to_string().yellow());
