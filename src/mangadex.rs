@@ -6,16 +6,16 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ORIGIN, REFERER, USER_
 use tokio::sync::Semaphore;
 use tokio::time::timeout;
 use std::fs::File;
-use std::io::{Cursor, Write};
+use std::io::{BufReader, Cursor, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fs, process};
 use std::{collections::HashMap, time::Duration};
 use anyhow::{Context, Result};
 use colored::Colorize;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use crate::utils::{format_to_string, handle_img_extension, handle_url};
+use crate::utils::{format_to_string, handle_img_extension, handle_url, create_json_file_if_not_exists};
 
 
 /**
@@ -105,6 +105,20 @@ struct ImageResChapter {
     data_saver: Vec<String>,
 }
 
+
+#[derive(Deserialize, Serialize, Default, Debug)]
+#[allow(dead_code)]
+struct Cache {
+    files: HashMap<String,String>,
+}
+
+#[derive(Deserialize, Serialize, Default, Debug)]
+#[allow(dead_code)]
+pub struct DownLoadImgRes {
+    errors: Vec<usize>,
+    image_count: String,
+}
+
 pub async fn handle_mangadex(url: String) -> Result<()> {
     let url_split_vec: Vec<&str> = url.split("/").collect();
     let comic_id = url_split_vec[url_split_vec.len() - 2];
@@ -161,15 +175,49 @@ pub async fn handle_mangadex(url: String) -> Result<()> {
 
     println!("{}{}", "comic name is ".bright_yellow(), comic_name.bright_green());
 
+    let cache_file = format!("./{}_cache.json", &comic_name).replace(" ", "_");
+    let _ = create_json_file_if_not_exists(&cache_file);
+
+    let file = match File::open(&cache_file) {
+        Ok(file) => file,
+        Err(_) => {
+            let new_file = File::create(&cache_file).unwrap();
+            let default_cache = Cache::default();
+            let _ = serde_json::to_writer(&new_file, &default_cache);
+            new_file
+        }
+    };
+    let reader = BufReader::new(file);
+    let mut _cache: Cache = serde_json::from_reader(reader).unwrap_or_else(|_| {
+        Cache::default()
+    });
+
     for chapter in url_vec.iter() {
-        handle_mangadex_chapter(chapter.to_string(), &serial_hashmap, comic_name.to_string()).await;
+        if let Some(count) = _cache.files.get(chapter) {
+            println!("{}{}{}, {}", &chapter.green(), "count is ".yellow(), count.green(), "alread done".yellow());
+            continue;
+        }
+        match handle_mangadex_chapter(chapter.to_string(), &serial_hashmap, comic_name.to_string()).await {
+            Ok(errors) => {
+                if errors.errors.is_empty() {
+                    _cache.files.insert(chapter.to_string(), errors.image_count);
+                }
+
+                let file = File::create(&cache_file).unwrap();
+                serde_json::to_writer(file, &_cache).unwrap();
+            }
+            Err(e) => {
+                eprintln!("{}{}", "something is wrong: ".red(), e);
+                process::exit(1);
+            }
+        };
     }
 
     Ok(())
 }
 
 
-async fn handle_mangadex_chapter (chapter_url: String, serial_hashmap: &HashMap<String, SerialHashmap>, comic_name: String) {
+async fn handle_mangadex_chapter (chapter_url: String, serial_hashmap: &HashMap<String, SerialHashmap>, comic_name: String) -> Result<DownLoadImgRes> {
     let url_split_vec: Vec<&str> = chapter_url.split("/").collect();
     let chapter_id = if url_split_vec.len() > 5 { url_split_vec[url_split_vec.len() - 2] } else { url_split_vec[url_split_vec.len() - 1] };
     let mut urls: Vec<String> = Vec::new();
@@ -199,12 +247,19 @@ async fn handle_mangadex_chapter (chapter_url: String, serial_hashmap: &HashMap<
 
     println!("{}{} {}{}", "volume: ".bright_yellow(), &chapter_info.volume.bright_green(), "chapter: ".bright_yellow(), &chapter_info.chapter.bright_green());
 
-    down_img(urls, &chapter_local_path).await;
+    let errors = down_img(urls.clone(), &chapter_local_path).await;
 
+
+    let res: DownLoadImgRes = DownLoadImgRes {
+        errors,
+        image_count: (urls.len()).to_string(),
+    };
+
+    Ok(res)
 }
 
 
-pub async fn down_img(url: Vec<String>, file_path: &str) {
+pub async fn down_img(url: Vec<String>, file_path: &str) -> Vec<usize>{
     let _ = fs::create_dir_all(file_path);
     let client = Client::new();
     let _domain = handle_url(&url[0]);
@@ -443,4 +498,6 @@ pub async fn down_img(url: Vec<String>, file_path: &str) {
             );
         }
     }
+
+    errors.to_vec()
 }

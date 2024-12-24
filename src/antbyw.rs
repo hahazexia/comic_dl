@@ -99,7 +99,7 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
             println!("{}{}", "comic name is ".yellow(), name.to_string().bright_green());
             // create juan output directory
             let _ = fs::create_dir_all(format!("./{}_{}", &name, text_to_find).replace(" ", "_"));
-            cache_file = format!("./{}_{}.json", &name, &text_to_find).replace(" ", "_");
+            cache_file = format!("./{}_{}_cache.json", &name, &text_to_find).replace(" ", "_");
             let _ = create_json_file_if_not_exists(&cache_file);
         } else {
             eprintln!("Error: can not find comic name!");
