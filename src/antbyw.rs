@@ -150,7 +150,7 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         if let Some(switcher) = juan_switcher {
             // println!("find switcher! name");
             let mut target: Vec<_> = switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()).collect();
-            println!("{}{}", "All count is ".bright_yellow().on_bright_purple(), target.len().to_string().cyan());
+            println!("{}{}", "All count is ".bright_yellow().on_bright_purple(), target.len().to_string().bright_yellow().on_bright_purple());
             target.sort_by(|a, b| {
                 let a_inner = a.inner_html();
                 let b_inner = b.inner_html();
