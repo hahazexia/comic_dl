@@ -60,7 +60,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
-
+    // println!("{}", "hahaha".bright_yellow().on_bright_purple());
     let cli = Cli::parse();
 
     let url: String = cli.url;

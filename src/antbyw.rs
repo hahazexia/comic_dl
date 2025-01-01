@@ -150,7 +150,7 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
         if let Some(switcher) = juan_switcher {
             // println!("find switcher! name");
             let mut target: Vec<_> = switcher.select(&scraper::Selector::parse("a.zj-container").unwrap()).collect();
-            println!("{}{}", "All count is ".yellow(), target.len());
+            println!("{}{}", "All count is ".bright_yellow().on_bright_purple(), target.len().to_string().cyan());
             target.sort_by(|a, b| {
                 let a_inner = a.inner_html();
                 let b_inner = b.inner_html();
@@ -171,8 +171,8 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                     let complete_url = host + &complete_url;
                     println!(
                         "{} {} {}is {}, {}is {}",
-                        "num".yellow(),
-                        format!("{}", i + 1).yellow(),
+                        "num".bright_yellow().on_bright_purple(),
+                        format!("{}", i + 1).bright_yellow().on_bright_purple(),
                         "complete_url ".purple(),
                         complete_url,
                         "name ".purple(),
@@ -311,7 +311,7 @@ pub async fn handle_current(url: String, element_selector: String, attr: String,
     let img_count;
     if let Some(image_count_temp) = image_count {
         img_count = image_count_temp.inner_html();
-        println!("{}{:?}", "image_count is ".yellow(), image_count_temp.inner_html());
+        println!("{}{:?}", "image_count is ".bright_yellow().on_bright_purple(), image_count_temp.inner_html());
     } else {
         img_count = "".to_string();
     }
