@@ -207,7 +207,7 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                             _ => {""}
                         };
 
-                        println!("{}", dir_path.to_string().bright_black().on_bright_white());
+                        println!("{}", dir_path.to_string().bright_white().on_blue());
 
                         let max_retries = 3; // 最大重试次数
                         let mut attempts = 0;
