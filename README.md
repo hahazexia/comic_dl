@@ -42,3 +42,4 @@ cargo run -- -u "https://mangadex.org/title/40bc649f-7b49-4645-859e-6cd94136e722
 
 * `version 1.0.0` Support antbyw and mangadex, antbyw download have .json cache file. Support local image file convert to jpg format. Support local image upscale by [Upscayl](https://github.com/upscayl/upscayl).
 * `version 1.0.1` Support mangadex download have .json cache file. Support mangadex chapters sort.
+* `version 1.0.12` Ant support caching HTML strings to a local folder to speed up performance. Print the final error message after everything is done.
