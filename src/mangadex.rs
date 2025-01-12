@@ -15,7 +15,7 @@ use anyhow::{Context, Result};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 
-use crate::utils::{format_to_string, handle_img_extension, handle_url, create_json_file_if_not_exists};
+use crate::utils::{format_to_string, handle_img_extension, handle_url, create_file_if_not_exists};
 
 
 /**
@@ -176,7 +176,7 @@ pub async fn handle_mangadex(url: String) -> Result<()> {
     println!("{}{}", "comic name is ".bright_yellow(), comic_name.bright_green());
 
     let cache_file = format!("./{}_cache.json", &comic_name).replace(" ", "_");
-    let _ = create_json_file_if_not_exists(&cache_file);
+    let _ = create_file_if_not_exists(&cache_file);
 
     let file = match File::open(&cache_file) {
         Ok(file) => file,

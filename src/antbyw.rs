@@ -23,7 +23,9 @@ use crate::utils::{
     handle_url,
     handle_img_extension,
     extract_number,
-    create_json_file_if_not_exists,
+    create_file_if_not_exists,
+    read_file_to_string,
+    write_string_to_file,
 };
 
 use crate::dl_type::DlType;
@@ -68,30 +70,27 @@ pub struct DownImgRes {
     current_chapter_name: String,
 }
 
+// https://www.antbyw.com/plugin.php?id=jameson_manhua&c=index&a=bofang&kuid=142472
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct UrlQueryParams {
+    kuid: i32,
+}
+
+#[derive(Deserialize, Debug)]
+#[allow(dead_code)]
+pub struct UrlQueryParams2 {
+    kuid: i32,
+    zjid: i32,
+}
+
 pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
     // current only support antbyw.com
     if !url.contains("https://www.antbyw.com/") {
         eprintln!("Error: current only support antbyw.com.");
         process::exit(1);
     } else {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build().unwrap();
-        let response = client.get(&url).send().await.unwrap();
-        let html_content = response.text().await.unwrap();
-
-        let document = scraper::Html::parse_document(&html_content);
-        let selector_juan_title = &scraper::Selector::parse("h3.uk-alert-warning").unwrap();
-        let juan_nav = document.select(selector_juan_title);
-        let mut juan_switcher = None;
-
-        let mut comic_name = None;
-        let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
-        let comic_name_temp = document.select(name_selector);
-        for name in comic_name_temp {
-            comic_name = Some(name.inner_html().replace(" ", "_"));
-        }
-
         let mut cache_file_type = "";
         let text_to_find = match dl_type {
             DlType::Current => {
@@ -113,6 +112,42 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
             DlType::Local => "_",
             DlType::Upscale => "_",
         };
+        let params: UrlQueryParams = serde_urlencoded::from_str(&url).unwrap();
+        let first_html_cache_name = format!("./_cache/{}_{}.cachehtml", params.kuid, &cache_file_type);
+
+        let html_content;
+
+        match read_file_to_string(&first_html_cache_name) {
+            Ok(content) => {
+                html_content = content;
+            },
+            Err(_e) => {
+                let client = Client::builder()
+                    .timeout(Duration::from_secs(10))
+                    .build().unwrap();
+                let response = client.get(&url).send().await.unwrap();
+                html_content = response.text().await.unwrap();
+                let _ = create_file_if_not_exists(&first_html_cache_name);
+                match write_string_to_file(&first_html_cache_name, &html_content) {
+                    Ok(()) => println!("{}", "write cache html success".green()),
+                    Err(_e) => println!("{}", "write cache html failed".red()),
+                };
+            },
+        }
+
+
+        let document = scraper::Html::parse_document(&html_content);
+        let selector_juan_title = &scraper::Selector::parse("h3.uk-alert-warning").unwrap();
+        let juan_nav = document.select(selector_juan_title);
+        let mut juan_switcher = None;
+
+        let mut comic_name = None;
+        let name_selector = &scraper::Selector::parse(".uk-heading-line.mt10.m10.mbn").unwrap();
+        let comic_name_temp = document.select(name_selector);
+        for name in comic_name_temp {
+            comic_name = Some(name.inner_html().replace(" ", "_"));
+        }
+
 
         let cache_file;
 
@@ -120,8 +155,8 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
             println!("{}{}", "comic name is ".yellow(), name.to_string().bright_green());
             // create juan output directory
             let _ = fs::create_dir_all(format!("./{}_{}", &name, text_to_find).replace(" ", "_"));
-            cache_file = format!("./{}_cache_{}.json", &name, &cache_file_type).replace(" ", "_");
-            let _ = create_json_file_if_not_exists(&cache_file);
+            cache_file = format!("./_cache/{}_{}_cache_{}.json", params.kuid, &name, &cache_file_type).replace(" ", "_");
+            let _ = create_file_if_not_exists(&cache_file);
         } else {
             eprintln!("Error: can not find comic name!");
             process::exit(1);
@@ -305,11 +340,29 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
 }
 
 pub async fn handle_current(url: String, element_selector: String, attr: String, file: String, current_chapter_name: &String) -> Result<DownLoadImgRes> {
-    let client: Client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()?;
-    let response = client.get(&url).send().await.context("Failed to send request".red())?;
-    let html_content = response.text().await.context("Failed to get response text".red())?;
+    let params: UrlQueryParams2 = serde_urlencoded::from_str(&url).unwrap();
+    let second_html_cache_name = format!("./_cache/{}_{}_{}.cachehtml", params.kuid, params.zjid, &current_chapter_name);
+    let html_content;
+
+    match read_file_to_string(&second_html_cache_name) {
+        Ok(content) => {
+            html_content = content;
+        },
+        Err(_e) => {
+            let client: Client = Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()?;
+            let response = client.get(&url).send().await.context("Failed to send request".red())?;
+            html_content = response.text().await.context("Failed to get response text".red())?;
+
+            let _ = create_file_if_not_exists(&second_html_cache_name);
+            match write_string_to_file(&second_html_cache_name, &html_content) {
+                Ok(()) => println!("{}", "write cache html success".green()),
+                Err(_e) => println!("{}", "write cache html failed".red()),
+            };
+        },
+    }
+
 
     let document = scraper::Html::parse_document(&html_content);
     let image_selector = scraper::Selector::parse(&element_selector)

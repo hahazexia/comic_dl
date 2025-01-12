@@ -333,6 +333,7 @@ dependencies = [
  "scraper",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "tokio",
  "url",
 ]

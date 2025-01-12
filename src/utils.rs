@@ -1,6 +1,7 @@
 use image::ImageFormat;
 use url::Url;
 use std::{fs, path::Path};
+use std::io::Error;
 
 // 根据image库类型返回图片格式字符串
 pub fn format_to_string(format: &ImageFormat) -> &'static str {
@@ -111,7 +112,7 @@ pub fn get_second_level_domain(url_str: &str) -> Option<String> {
     }
 }
 
-pub fn create_json_file_if_not_exists(file_name: &str) -> std::io::Result<()> {
+pub fn create_file_if_not_exists(file_name: &str) -> std::io::Result<()> {
     // 检查文件是否存在
     if !Path::new(&file_name).exists() {
         // 如果文件不存在，创建目录
@@ -124,5 +125,17 @@ pub fn create_json_file_if_not_exists(file_name: &str) -> std::io::Result<()> {
         println!("File already exists: {}", file_name);
     }
 
+    Ok(())
+}
+
+pub fn read_file_to_string(file_path: &str) -> Result<String, Error> {
+    // 读取文件内容并返回字符串
+    let content = fs::read_to_string(file_path)?;
+    Ok(content)
+}
+
+pub fn write_string_to_file(file_path: &str, content: &str) -> Result<(), Error> {
+    // 将字符串内容写入文件
+    fs::write(file_path, content)?;
     Ok(())
 }
