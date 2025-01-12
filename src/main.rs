@@ -113,7 +113,8 @@ async fn main() {
         "antbyw" => {
             match dl_type {
                 DlType::Current => {
-                    let _ = handle_current(url, element_selector, attr, file).await;
+                    let temp_name = "";
+                    let _ = handle_current(url, element_selector, attr, file, &temp_name.to_string()).await;
                 }
                 DlType::Juan => {
                     handle_juan_hua_fanwai(url, DlType::Juan).await;

@@ -321,7 +321,7 @@ dependencies = [
 
 [[package]]
 name = "comic_dl"
-version = "1.0.1"
+version = "1.0.11"
 dependencies = [
  "anyhow",
  "bytes",
