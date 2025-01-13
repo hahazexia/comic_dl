@@ -113,7 +113,7 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
             DlType::Upscale => "_",
         };
         let params: UrlQueryParams = serde_urlencoded::from_str(&url).unwrap();
-        let first_html_cache_name = format!("./_cache/{}_{}.cachehtml", params.kuid, &cache_file_type);
+        let first_html_cache_name = format!("./_cache/{}.cachehtml", params.kuid);
 
         let html_content;
 
