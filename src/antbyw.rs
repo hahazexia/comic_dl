@@ -444,7 +444,7 @@ pub async fn down_img<'a>(url: Vec<&str>, file_path: &str, current_chapter_name:
         HeaderValue::from_static("no-cors"),
     );
 
-    println!("domain is {domain}, ext is {ext}");
+    // println!("domain is {domain}, ext is {ext}");
 
     let img_format_error = Arc::new(Mutex::new(Vec::new()));
 
