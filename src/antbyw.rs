@@ -129,8 +129,14 @@ pub async fn handle_juan_hua_fanwai(url: String, dl_type: DlType) {
                 html_content = response.text().await.unwrap();
                 let _ = create_file_if_not_exists(&first_html_cache_name);
                 match write_string_to_file(&first_html_cache_name, &html_content) {
-                    Ok(()) => println!("{}", "write cache html success".green()),
-                    Err(_e) => println!("{}", "write cache html failed".red()),
+                    Ok(()) => {
+                        // println!("{}", "write cache html success".green());
+                        ""
+                    },
+                    Err(_e) => {
+                        println!("{}", "write cache html failed".red());
+                        ""
+                    },
                 };
             },
         }

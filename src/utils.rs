@@ -120,9 +120,9 @@ pub fn create_file_if_not_exists(file_name: &str) -> std::io::Result<()> {
 
         // 创建文件
         fs::File::create(&file_name)?;
-        println!("File created: {}", file_name);
+        // println!("File created: {}", file_name);
     } else {
-        println!("File already exists: {}", file_name);
+        // println!("File already exists: {}", file_name);
     }
 
     Ok(())
