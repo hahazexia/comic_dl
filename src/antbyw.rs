@@ -363,8 +363,14 @@ pub async fn handle_current(url: String, element_selector: String, attr: String,
 
             let _ = create_file_if_not_exists(&second_html_cache_name);
             match write_string_to_file(&second_html_cache_name, &html_content) {
-                Ok(()) => println!("{}", "write cache html success".green()),
-                Err(_e) => println!("{}", "write cache html failed".red()),
+                Ok(()) => {
+                    // println!("{}", "write cache html success".green());
+                    ""
+                },
+                Err(_e) => {
+                    println!("{}", "write cache html failed".red());
+                    ""
+                },
             };
         },
     }
