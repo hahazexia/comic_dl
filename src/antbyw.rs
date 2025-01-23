@@ -37,22 +37,12 @@ struct CacheImgCount {
     count: String,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Default, Debug)]
 #[allow(dead_code)]
 struct Cache {
     juan: HashMap<String,String>,
     hua: HashMap<String,String>,
     fanwai: HashMap<String,String>,
-}
-
-impl Default for Cache {
-    fn default() -> Self {
-        Cache {
-            juan: HashMap::default(),
-            hua: HashMap::default(),
-            fanwai: HashMap::default(),
-        }
-    }
 }
 
 #[derive(Deserialize, Serialize, Default, Debug)]
@@ -633,7 +623,7 @@ pub async fn down_img<'a>(url: Vec<&str>, file_path: &str, current_chapter_name:
                         Path::new(&format!("{}.{}", name, ext)),
                     ).unwrap();
                     file.write_all(&res).unwrap();
-                    return;
+                    // return;
                     // process::exit(1);
                 }
             }

@@ -38,15 +38,6 @@ struct Cli {
     dl_type: DlType,
 }
 
-/// range min value of the chapters
-// #[arg(short, long, default_value_t = 0.0)]
-// small: f32,
-
-/// range min value of the chapters
-// #[arg(short, long, default_value_t = std::f32::INFINITY)]
-// big: f32,
-
-
 
 // const RED: &str = "\x1b[31m";    // 红色
 // const GREEN: &str = "\x1b[32m";  // 绿色
@@ -97,43 +88,32 @@ async fn main() {
     }
 
     let site_name_temp = get_second_level_domain(&url);
-    let handled_site_name;
 
-    match site_name_temp {
-        Some(site_name) => {
-            handled_site_name = site_name;
-        }
-        None => {
-            eprintln!("{}", "get second level domain failed".red());
-            process::exit(1);
-        }
-    }
-
-    match handled_site_name.as_str() {
-        "antbyw" => {
-            match dl_type {
+    if let Some(site_name) = site_name_temp.as_ref() {
+        match site_name.as_str() {
+            "antbyw" => match dl_type {
                 DlType::Current => {
                     let temp_name = "";
                     let _ = handle_current(url, element_selector, attr, file, &temp_name.to_string()).await;
                 }
-                DlType::Juan => {
-                    handle_juan_hua_fanwai(url, DlType::Juan).await;
+                DlType::Juan | DlType::Hua | DlType::Fanwai => {
+                    handle_juan_hua_fanwai(url, dl_type).await;
                 }
-                DlType::Hua => {
-                    handle_juan_hua_fanwai(url, DlType::Hua).await;
-                }
-                DlType::Fanwai => {
-                    handle_juan_hua_fanwai(url, DlType::Fanwai).await;
-                },
                 _ => {}
+            },
+            "mangadex" => {
+                let _ = handle_mangadex(url).await;
+            },
+            "komiic" => {
+
+            },
+            _ => {
+                eprintln!("{}", "unknown manga site, not support".red());
+                process::exit(1);
             }
         }
-        "mangadex" => {
-            let _ = handle_mangadex(url).await;
-        }
-        _ => {
-            eprintln!("{}", "unknown manga site, not support".red());
-            process::exit(1);
-        }
+    } else {
+        eprintln!("{}", "unknown manga site, not support".red());
+        process::exit(1);
     }
 }
